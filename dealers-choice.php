@@ -214,6 +214,22 @@ define('DC_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('DC_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('DC_VERSION', '1.0.0');
 
+// Plugin Update Checker — polls GitHub releases and surfaces updates in WP Admin.
+// For private repos, define DC_GITHUB_TOKEN in wp-config.php with a read-only PAT.
+require_once DC_PLUGIN_DIR . 'lib/plugin-update-checker/load-v5p7.php';
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+$dc_update_checker = PucFactory::buildUpdateChecker(
+    'https://github.com/m2kevin/dealerschoice-plugin/',
+    __FILE__,
+    'dealerschoice'
+);
+$dc_update_checker->setBranch('main');
+if ( defined('DC_GITHUB_TOKEN') && DC_GITHUB_TOKEN ) {
+    $dc_update_checker->setAuthentication( DC_GITHUB_TOKEN );
+}
+$dc_update_checker->getVcsApi()->enableReleaseAssets();
+
 // Load core classes
 require_once plugin_dir_path(__FILE__) . '/classes/class.inventory.php';
 require_once plugin_dir_path(__FILE__) . '/classes/class.boat.php';
