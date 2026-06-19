@@ -220,7 +220,7 @@ require_once DC_PLUGIN_DIR . 'lib/plugin-update-checker/load-v5p7.php';
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
 $dc_update_checker = PucFactory::buildUpdateChecker(
-    'https://github.com/m2kevin/dealerschoice-plugin/',
+    'https://github.com/dealerschoice-solutions/dealerschoice-plugin/',
     __FILE__,
     'dealerschoice'
 );
