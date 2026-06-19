@@ -1,0 +1,1742 @@
+/**
+ * DealersChoice Public Styles
+ * 
+ * Default styles for inventory display, filters, and boat detail pages.
+ * These styles can be overridden in your theme folder.
+ * 
+ * @package DealersChoice
+ * @subpackage Public
+ * @since 1.0.0
+ */
+
+/* ==========================================================================
+   CSS Custom Properties
+   ========================================================================== */
+
+:root {
+    --primary-color: #062055;
+    --secondary-color: #1471C5;
+    --dark-gray: #333;
+    --medium-gray: #666;
+    --light-gray: #f8f8f8;
+    --border-gray: #ddd;
+    --flex-gap: 15px;
+}
+
+/* ==========================================================================
+   Base Layout
+   ========================================================================== */
+.dealerschoice-inventory-page #primary .container {
+    max-width: 1400px;
+}
+
+.dealerschoice-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    @media screen and (min-width: 600px) {
+        padding-inline: 40px;
+    }
+}
+
+.dealerschoice-layout {
+    display: flex;
+    gap: var(--flex-gap);
+    margin-top: 30px;
+}
+
+/* ==========================================================================
+   Utility Classes (Namespaced with dc- to prevent theme conflicts)
+   ========================================================================== */
+.dc-row {
+    padding: 3em 0 1.5em;
+    @media screen and (min-width: 600px){
+        padding: 4em 0 2.5em;
+    }
+}
+
+.dc-flexed {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--flex-gap);
+}
+.dc-flexed-vertical-center {
+    align-items: center;
+}
+.dc-flexed-vertical-end {
+    align-items: flex-end;
+}
+.dc-flexed-justify-end {
+    justify-content: flex-end;
+}
+
+.dc-clear:before, .dc-clear:after {content: ""; display: table; table-layout: fixed;}
+.dc-clear:after {clear: both;}
+
+.dc-text-right {
+    text-align: right;
+}
+.dc-text-center {
+    text-align: center;
+}
+
+.dc-secondary-text {
+    color: var(--secondary-color);
+}
+.dc-small-text {
+    font-size: 0.9em;
+}
+
+.dc-p-15 {
+    padding: 15px;
+}
+.dc-p-25 {
+    padding: 25px;
+}
+.dc-mb {
+    margin-bottom: 1.5rem;
+}
+.dc-lh-0 {
+    line-height: 0;
+}
+
+button.dc-button,
+a.dc-button {
+    display: inline-block;
+    padding: 10px 20px;
+    background: var(--primary-color);
+    color: #fff;
+    text-decoration: none !important;
+    border-radius: 5px;
+    font-weight: 600;
+    transition: background 0.3s ease;
+    text-align: center;
+    line-height: 1.25;
+}
+
+.dc-button:hover,
+.dc-button:focus {
+    background: var(--secondary-color);
+}
+
+/* Responsive Flex Widths */
+.dc-flex-30 { flex: 0 0 calc(30% - var(--flex-gap)); }
+.dc-flex-40 { flex: 0 0 calc(40% - var(--flex-gap)); }
+.dc-flex-42 { flex: 0 0 calc(42% - var(--flex-gap)); }
+.dc-flex-45 { flex: 0 0 calc(45% - var(--flex-gap)); }
+.dc-flex-48 { flex: 0 0 calc(48% - var(--flex-gap)); }
+.dc-flex-50 { flex: 0 0 calc(50% - var(--flex-gap)); }
+.dc-flex-55 { flex: 0 0 calc(55% - var(--flex-gap)); }
+.dc-flex-60 { flex: 0 0 calc(60% - var(--flex-gap)); }
+.dc-flex-70 { flex: 0 0 calc(70% - var(--flex-gap)); }
+
+@media (max-width: 768px) {
+    .dc-flex-30,
+    .dc-flex-40,
+    .dc-flex-48,
+    .dc-flex-60,
+    .dc-flex-70 {
+        flex: 0 0 100%;
+    }
+}
+
+/* ==========================================================================
+   Archive / Listing Page
+   ========================================================================== */
+
+.page-header {
+    margin-bottom: 30px;
+}
+
+.page-header .page-title {
+    margin: 0 0 10px;
+    font-size: 2.5rem;
+}
+
+.page-header .inventory-count {
+    color: var(--medium-gray);
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+/* ==========================================================================
+   Filters Sidebar
+   ========================================================================== */
+
+.dealerschoice-filters {
+    flex: 0 0 280px;
+    max-width: 280px;
+}
+
+.dealerschoice-filters .widget {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: var(--light-gray);
+    border-radius: 8px;
+}
+
+.dealerschoice-filters .widget-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-gray);
+    & button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: inherit;
+        font-family: inherit;
+        font-weight: inherit;
+        color: inherit;
+        cursor: pointer;
+        text-align: left;
+        &:focus {
+            outline: 2px solid var(--secondary-color);
+            outline-offset: 4px;
+            border-radius: 2px;
+        }
+    }
+}
+
+.dealerschoice-filters .toggle-icon {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    line-height: 20px;
+    text-align: center;
+    transition: transform 0.3s ease;
+}
+
+.dealerschoice-filters .toggle-icon:before {
+    content: "\f106";
+    font-family: "Font Awesome 6 Free";
+    font-size: 20px;
+}
+
+/* Rotate icon when collapsed */
+.dealerschoice-filters .widget-title button[aria-expanded="false"] .toggle-icon {
+    transform: rotate(180deg);
+}
+.dealerschoice-filters .widget-title:has(button[aria-expanded="false"]) {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.dealerschoice-filters .widget-content {
+    overflow: hidden;
+}
+
+/* Hidden options for "Show More" functionality */
+.dealerschoice-filters .hidden-option {
+    display: none;
+}
+
+.dealerschoice-filters .show-more-link {
+    display: inline-block;
+    margin-top: 5px;
+    color: var(--secondary-color);
+    text-decoration: none;
+    font-size: 0.85em;
+    font-weight: 600;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px 0;
+    &:hover,
+    &:focus {
+        text-decoration: underline;
+        outline: 1px dotted var(--secondary-color);
+    }
+}
+
+.inventory-filter-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.widget .filter-toggle {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: #FFF;
+    margin-bottom: 0;
+    padding: 10px 0;
+}
+
+.widget .filter-toggle a {
+    text-decoration: underline;
+}
+.widget .filter-toggle a:focus-visible {
+    outline: 1px dashed var(--dark-blue);
+}
+
+.filter-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.filter-input-wrapper input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.filter-input-wrapper label {
+    cursor: pointer;
+    margin: 0;
+}
+
+.filter-count {
+    color: var(--medium-gray);
+    font-size: 0.9rem;
+}
+
+/* Mobile Filter Toggle */
+.mobile-filter-toggle {
+    display: none;
+    margin-bottom: 20px;
+    width: 100%;
+    padding: 12px 20px;
+    background: var(--light-gray);
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-size: 1rem;
+    text-align: center;
+}
+
+.mobile-filter-close {
+    display: none;
+    text-align: right;
+    margin-bottom: 15px;
+}
+
+.mobile-filter-close button {
+    background: none;
+    border: none;
+    color: #000;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 5px;
+}
+
+.mobile-filter-close button i {
+    color: var(--dark-gray);
+}
+
+/* ==========================================================================
+   Search & Sort Controls
+   ========================================================================== */
+
+.search-sort-wrapper {
+    margin-bottom: 30px;
+}
+
+.search-sort-inner {
+    @media screen and (min-width: 768px){
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: flex-end;
+        flex-wrap: wrap;
+    }
+}
+
+.inventory-search {
+    margin-bottom: 30px;
+    
+    @media screen and (min-width: 768px){
+        flex: 0 1 420px;
+        margin-bottom: 0;
+    }
+
+    &  form {
+        display: flex;
+        gap: 10px;
+
+        & input[type="search"] {
+            flex: 1;
+            padding: 10px 15px;
+            border: 1px solid var(--border-gray);
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+        & button.dc-button {
+            padding: 8px 20px;
+        }
+    }
+}
+
+.inventory-sort-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.inventory-sort-wrapper label {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.inventory-sort-wrapper select {
+    padding: 10px 15px;
+    border: 1px solid var(--border-gray);
+    border-radius: 5px;
+    font-size: 1rem;
+}
+
+/* ==========================================================================
+   Results Area
+   ========================================================================== */
+
+.dealerschoice-results {
+    flex: 1;
+    padding-left: calc(var(--flex-gap) * 2);
+}
+
+.inventory-results {
+    margin-bottom: 40px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+.loading-spinner {
+    text-align: center;
+    padding: 60px 20px;
+    font-size: 1.2rem;
+    color: var(--medium-gray);
+    & .fa-arrows-rotate-reverse {
+        color: var(--secondary-color);
+        display: inline-block;
+        margin-right: 10px;
+        animation: spin 1s linear infinite;
+    }
+}
+
+.no-results {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.no-results h2 {
+    margin-bottom: 15px;
+}
+
+.no-results p {
+    margin-bottom: 20px;
+}
+
+/* ==========================================================================
+   Location Selector Dialog
+   ========================================================================== */
+#location-selector {
+    & ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        & li {
+            margin-bottom: 10px;
+            &:last-child {
+                margin-bottom: 0;
+            }
+             & button.dc-location-btn {
+                width: 100%;
+                padding: 10px 15px;
+                border-radius: 5px;
+                border: 2px solid #FFF;
+                font-size: 1rem;
+                background: #FFF;
+                color: #000;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }
+            & button.dc-location-btn.active {
+                background: #f0f0f0;
+                border-color: #000;
+            }
+            & button.dc-location-btn:hover,
+            & button.dc-location-btn:focus {
+                background: #f0f0f0;
+            }
+        }
+    }
+}
+
+/* ==========================================================================
+   Boat Grid / Cards
+   ========================================================================== */
+
+/* Inventory Section (Boat Card) */
+.inventory-section {
+    background: #fff;
+    border: 1px solid var(--border-gray);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: box-shadow 0.3s ease;
+    &:hover {
+        box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+    }
+}
+
+/* Inventory Photo */
+.inventory-photo {
+    position: relative;
+    & img {
+        width: 100%;
+        height: auto;
+        display: block;
+        object-fit: cover;
+        aspect-ratio: 4 / 3;
+    }
+
+    & a {
+        display: block;
+    }
+
+    & .favorite-button-wrapper {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 100;
+        & button {
+            opacity: 0.75;
+            padding: 0.5rem 0.75rem;
+            &:hover,
+            &:focus {
+                opacity: 1;
+            }
+        }
+    }
+    & .status-badge-wrapper {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 100;
+    }
+    & .status-badge {
+        color: #FFF;
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        &.status-sold {
+            background-color: #dc3232;
+        }
+        &.status-pending {
+            background-color: #f56e28;
+        }
+        &.status-banner {
+            background-color: var(--primary-color);
+        }
+    }
+
+}
+
+/* Inventory Details */
+.inventory-details {
+    padding: 0 0 0 20px;
+    flex-grow: 1;
+}
+
+.inventory-header h2 {
+    margin: 0 0 10px;
+    font-size: 1.75rem;
+    line-height: 1.3;
+}
+
+.boat-id.dc-text-right {
+    text-align: left;
+    @media screen and (min-width: 1023px){
+        text-align: right;
+    }
+}
+
+.boat-stock-number {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--medium-gray);
+}
+
+/* Inventory Specs */
+.inventory-specs {
+    margin: 15px 0;
+    border-radius: 8px;
+    border: 1px solid var(--border-gray);
+    & .spec {
+        flex: 1;
+        min-width: 140px;
+        & .dc-flexed {
+            align-items: flex-start;
+        }
+        & .spec-icon {
+            font-size: 1.5rem;
+            color: var(--secondary-color);
+            width: 30px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        & .spec-detail {
+            flex: 1;
+            font-size: 0.9rem;
+        }
+
+        & .spec-detail strong {
+            display: block;
+            margin-bottom: 3px;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--medium-gray);
+        }
+    }
+}
+
+/* Pricing Details */
+.pricing-detail {
+    margin: 15px 0;
+    & p {
+        margin: 0 0 5px;
+    }
+    & .boat-price {
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+}
+
+/* Inventory Buttons */
+.inventory-buttons {
+    margin-top: 20px;
+}
+
+/* Legacy boat card styles (for backward compatibility) */
+.dealerschoice-boat-card .boat-card-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+
+/* ==========================================================================
+   Slider Styles
+   ========================================================================== */
+.dealerschoice-slider {
+    @media screen and (min-width: 1400px){
+        &:not(:has(.slick-slide:nth-of-type(4))){
+            max-width: 1400px;
+            margin-inline: auto;
+        }
+    }
+    & .slick-slide {
+        margin-right: 0;
+        @media screen and (min-width: 960px){
+            margin-right: 30px;
+        }
+        & .inventory-slide-image {
+            aspect-ratio: 4/3;
+            & img {
+                object-fit: cover;
+                block-size: 100%;
+                inline-size: 100%;
+            }
+        }
+        & .inventory-slide-button-wrapper {
+            @media screen and (min-width: 460px){
+                display: flex;
+                gap: var(--flex-gap);
+                justify-content: center;
+            }
+            & a.dc-button {
+                display: block;
+                &:not(:last-child) {
+                    margin-bottom: 10px;
+                }
+                @media screen and (min-width: 460px){
+                    flex: 1;
+                    &:not(:last-child) {
+                        margin-bottom: 0;
+                    }
+                }
+            }
+        }
+    }
+}
+
+& .button-wrapper {
+    text-align: center;
+    margin-top: 30px;
+
+    & .slick-arrow {
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+        font-size: 1.625rem;
+        padding: 0;
+        text-align: center;
+        border: 1px solid var(--primary-color);
+        background-color: var(--primary-color);
+        color: #FFF;
+        &:first-child {
+            margin-right: 25px;
+        }
+    }
+    & .slick-arrow:hover,
+    & .slick-arrow:focus-visible {
+        background-color: var(--secondary-color);
+        border-color: var(--secondary-color);
+        color: #FFF;
+    }
+    & .slick-arrow.slick-disabled {
+        border-color: var(--medium-gray);
+        color: var(--medium-gray);
+        background-color: #FFF;
+    }
+    & .slick-arrow.slick-disabled:hover,
+    & .slick-arrow.slick-disabled:focus {
+        cursor: not-allowed;
+        background-color: var(--light-gray);
+        border-color: var(--light-gray);
+    }
+}
+
+/* ==========================================================================
+   Pagination
+   ========================================================================== */
+
+.pagination-wrapper {
+    margin-top: 40px;
+}
+
+.pagination {
+    display: flex;
+    justify-content: center;
+}
+
+.pagination-list {
+    display: flex;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.pagination-list li {
+    margin: 0;
+}
+
+.pagination-list a {
+    display: block;
+    padding: 8px 12px;
+    background: #f5f5f5;
+    color: #333;
+    text-decoration: none;
+    border-radius: 3px;
+    transition: background 0.3s ease;
+}
+
+.pagination-list a:hover {
+    background: #e0e0e0;
+}
+
+.pagination-list li.active a {
+    background: #333;
+    color: #fff;
+}
+
+.pagination-ellipsis span {
+    display: block;
+    padding: 8px 12px;
+    color: #999;
+}
+
+/* ==========================================================================
+   Single Boat Detail Page
+   ========================================================================== */
+.boat-header {
+    & > .dc-flexed {
+        display: block;
+        @media screen and (min-width: 768px) {
+            display: flex;
+        }
+    }
+}
+.dealerschoice-single .boat-title {
+    margin: 0.5rem;
+    font-size: clamp(1.5rem, 2.2161vw + .838rem, 2.5rem);
+}
+
+.boat-detail {
+    position: relative;
+    height: 100%;
+}
+.boat-header-meta {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.boat-header-meta .meta-item {
+    padding: 10px 15px;
+    background: #f5f5f5;
+    border-radius: 5px;
+    font-size: 0.95rem;
+    line-height: 1.25;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.dc-favorite-btn {
+    font-size: 0.95rem;
+}
+
+.boat-header-meta {
+    & .boat-condition.new {
+        background: #28a745;
+        color: #fff;
+    }
+
+    & .boat-condition.used {
+        background: #007bff;
+        color: #fff;
+    }
+    & .boat-status.in-stock {
+        background: #46b450;
+        color: #fff;
+    }
+    & .boat-status.sold {
+        background: #dc3232;
+        color: #fff;
+    }
+    & .boat-status.pending {
+        background: #f56e28;
+        color: #fff;
+    }
+    & .boat-banner {
+        background: var(--primary-color);
+        color: #fff;
+    }
+}
+
+.boat-content-wrapper {
+    & > .dc-flexed {
+        display: block;
+        @media screen and (min-width: 1024px){
+            display: flex;
+        }
+    }
+}
+
+/* Gallery */
+.boat-gallery-wrapper {
+    width: 100%;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 3rem;
+    @media screen and (min-width: 1024px) {
+        margin-bottom: 0;
+    }
+    & .gallery-image-item {
+        aspect-ratio: 4/3;
+        overflow: hidden;
+        line-height: 0;
+        & img {
+            object-fit: cover;
+            object-position: center;
+            block-size: 100%;
+            inline-size: 100%;
+        }
+        & a {
+            display: block;
+            height: 100%;
+            position: relative;
+            & span.magnify {
+                position: absolute;
+                bottom: 20px;
+                right: 20px;
+                background: rgba(0,0,0,0.65);
+                color: #FFF;
+                font-size: 1.5rem;
+                padding: 20px;
+                border-radius: 20px;
+                opacity: 0;
+                transition: all ease 0.5s;
+            }
+            &:hover,
+            &:focus {
+                & span.magnify {
+                    opacity: 1;
+                }
+            }
+        }
+    }
+}
+
+/* Boat Info */
+.boat-info h2 {
+    margin: 0 0 20px;
+    font-size: 1.5rem;
+}
+
+.boat-price-section {
+    background: #f8f8f8;
+    border-radius: 8px;
+    & p {
+        margin-bottom: 0.125rem;
+    }
+    & > *:last-child {
+        margin-bottom: 0;
+    }
+    & .boat-price {
+        font-size: 1.5rem;
+    }
+    & .payment {
+        margin-top: 1.75rem;
+        & .payment-amount {
+            font-size: 1.33rem;
+        }
+        & .payment-details {
+            font-size: 1rem;
+        }
+    }
+}
+
+.price-main {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #333;
+}
+
+.price-label {
+    font-size: 0.95rem;
+}
+
+.boat-key-specs {
+    margin-bottom: 30px;
+}
+
+.specs-list {
+    display: grid;
+    gap: 15px;
+}
+
+.spec-item {
+    display: flex;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.spec-item dt {
+    font-weight: 600;
+}
+
+.spec-item dd {
+    margin: 0;
+}
+
+.boat-description {
+    margin-bottom: 30px;
+    & p {
+        max-width: 920px;
+        text-wrap: pretty;
+    }
+}
+
+.boat-contact-cta {
+    @media screen and (min-width: 600px){
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+    }
+    @media screen and (min-width: 860px){
+        justify-content: flex-start;
+        align-items: center;
+    }
+    & .dc-button {
+        display: block;
+        margin-bottom: 15px;
+        max-width: 320px;
+        @media screen and (min-width: 600px){
+            display: inline-block;
+            margin-bottom: 0;
+            max-width: none;
+            flex-basis: calc(50% - 10px);
+        }
+        @media screen and (min-width: 860px){
+            display: inline-block;
+            margin-bottom: 0;
+            flex-basis: auto;
+        }
+    }
+}
+
+/* Additional Details */
+.boat-additional-details {
+    & .accordion-item {
+        padding-top: 1.5rem;
+        margin-bottom: 1.5rem;
+        border-top: 1px solid var(--border-gray);
+
+        &:last-of-type {
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-gray);
+        }
+
+        & details.accordion summary::-webkit-details-marker {
+          display:none;
+        }
+        & summary.accordion-title {
+            position: relative;
+            display: block;
+            cursor: pointer;
+        }
+        & summary.accordion-title h3 {
+            font-size: clamp(1.25rem, .9259vw + 1.0648rem, 1.875rem);
+            margin-bottom: 0;
+            padding-right: 40px;
+        }
+        & summary.accordion-title:after {
+            content: '\2b';
+            font-family: 'Font Awesome 6 Free';
+            position: absolute;
+            right: 0;
+            top: 14px;
+            line-height: 0;
+            font-size: 1.75rem;
+            color: var(--medium-blue);
+            transition: all ease 0.3s;
+        }
+        & summary.accordion-title:hover:after {
+            transform: rotate(90deg);
+        }
+        & details[open] summary.accordion-title:after {
+            content: '\f068';
+            font-weight: 900;
+        }
+        & details[open] summary.accordion-title:hover:after {
+            transform: none;
+        }
+        & details.accordion .accordion-content {
+            padding: 2em 0 0.5em;
+            & p {
+                max-width: 920px;
+                text-wrap: pretty;
+            }
+            & ul {
+                columns: unset;
+                @media screen and (min-width: 600px) {
+                    columns: 2;
+                }
+                @media screen and (min-width: 1024px) {
+                    columns: 3
+                }
+            }
+        }
+    }
+
+    & .accordion-content:not(.videos-container) .dc-flexed,
+    & .boat-tech-specs .dc-flexed {
+        justify-content: flex-start;
+    }
+    & .tech-spec-item {
+        flex-basis: 48%;
+        @media screen and (min-width: 600px) {
+            flex-basis: 23%;
+        }
+        @media screen and (min-width: 1024px) {
+            flex-basis: 18%;
+        }
+        & strong {
+            display: block;
+        }
+    }
+
+    & .boat-video-item {
+        & .video-wrapper {
+            aspect-ratio: 16/9;
+            & iframe {
+                object-fit: cover;
+                object-position: center;
+                block-size: 100%;
+                inline-size: 100%;
+            }
+        }
+    }
+}
+
+/* Similar Boats */
+.similar-boats-section {
+    padding: 60px 0;
+    background: #f8f8f8;
+}
+
+.similar-boats-section h2 {
+    margin-bottom: 30px;
+}
+
+/* Screen reader only text */
+.dc-screen-reader-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+.dc-reveal-price-message {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-gray);
+}
+
+@media (max-width: 1024px) {
+    .dealerschoice-layout {
+        flex-direction: column;
+    }
+
+    .mobile-filter-toggle {
+        display: block;
+    }
+
+    .dealerschoice-filters {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #fff;
+        z-index: 9999;
+        max-width: 100%;
+        overflow-y: auto;
+        padding: 20px;
+        display: none;
+    }
+
+    .dealerschoice-filters.active {
+        display: block;
+    }
+
+    .mobile-filter-close {
+        display: block;
+    }
+
+    .inventory-details,
+    .dealerschoice-results {
+        padding-left: 0;
+    }
+    .inventory-header h2 {
+        margin-bottom: 0;
+    }
+    .inventory-buttons.dc-text-right {
+        text-align: center;
+        & .dc-flexed {
+            display: block;
+            & .dc-button {
+                display: block;
+                &:not(:last-child) {
+                    margin-bottom: 10px;
+                }
+            }
+        }
+    }
+}
+
+/* ==========================================================================
+   Boat Quiz (dc-quiz-*)
+   Step-by-step interactive quiz that recommends a boat type and shows
+   matching inventory. All color values reference the plugin's existing CSS
+   custom properties so the quiz inherits site branding automatically.
+   Additional overrides go in your theme's dealerschoice-override.css.
+   ========================================================================== */
+
+/* ── Wrapper ─────────────────────────────────────────────────────────────── */
+.dc-quiz-wrap {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem;
+    font-family: inherit;
+    color: var(--dark-gray, #333);
+}
+
+.dc-quiz-wrap *,
+.dc-quiz-wrap *::before,
+.dc-quiz-wrap *::after {
+    box-sizing: border-box;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.dc-quiz-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.dc-quiz-eyebrow {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--secondary-color, #1471C5);
+    margin-bottom: 0.4rem;
+}
+
+.dc-quiz-title {
+    font-size: clamp(1.6rem, 5vw, 2.4rem);
+    font-weight: 700;
+    color: var(--primary-color, #062055);
+    line-height: 1.1;
+    margin: 0 0 0.4rem;
+}
+
+.dc-quiz-subtitle {
+    font-size: 0.95rem;
+    color: var(--medium-gray, #666);
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* ── Progress bar ────────────────────────────────────────────────────────── */
+.dc-quiz-progress {
+    height: 4px;
+    background: var(--border-gray, #ddd);
+    border-radius: 2px;
+    margin-bottom: 2rem;
+    overflow: hidden;
+}
+
+.dc-quiz-progress-fill {
+    height: 100%;
+    background: var(--secondary-color, #1471C5);
+    border-radius: 2px;
+    transition: width 0.35s ease;
+    width: 0%;
+}
+
+/* ── Step wrapper ────────────────────────────────────────────────────────── */
+.dc-quiz-step {
+    display: none;
+    animation: dcQuizFadeUp 0.3s ease both;
+}
+
+.dc-quiz-step.is-active {
+    display: block;
+}
+
+@keyframes dcQuizFadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Question label ──────────────────────────────────────────────────────── */
+.dc-quiz-question-label {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    margin-bottom: 0.85rem;
+}
+
+.dc-quiz-question-num {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--secondary-color, #1471C5);
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.dc-quiz-question-text {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--primary-color, #062055);
+    margin: 0;
+}
+
+/* ── Option grid ─────────────────────────────────────────────────────────── */
+.dc-quiz-grid {
+    display: grid;
+    gap: 12px;
+}
+
+.dc-quiz-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.dc-quiz-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.dc-quiz-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+@media (max-width: 580px) {
+    .dc-quiz-grid.cols-3,
+    .dc-quiz-grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 340px) {
+    .dc-quiz-grid.cols-2,
+    .dc-quiz-grid.cols-3,
+    .dc-quiz-grid.cols-4 { grid-template-columns: 1fr; }
+}
+
+/* ── Option card ─────────────────────────────────────────────────────────── */
+.dc-quiz-option {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.45rem;
+    padding: 1rem 0.75rem 0.85rem;
+    background: #fff;
+    border: 2px solid var(--border-gray, #ddd);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s, transform 0.15s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+    user-select: none;
+}
+
+.dc-quiz-option:hover {
+    border-color: var(--secondary-color, #1471C5);
+    background: var(--light-gray, #f8f8f8);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.dc-quiz-option.selected {
+    border-color: var(--primary-color, #062055);
+    background: var(--light-gray, #f8f8f8);
+    box-shadow: 0 0 0 1px var(--primary-color, #062055), 0 6px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* Top accent bar on selected */
+.dc-quiz-option::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--primary-color, #062055);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.25s ease;
+    border-radius: 10px 10px 0 0;
+}
+
+.dc-quiz-option.selected::before { transform: scaleX(1); }
+
+.dc-quiz-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+}
+
+/* SVG illustration area */
+.dc-quiz-svg-wrap {
+    width: 100%;
+    aspect-ratio: 3 / 2;
+    border-radius: 7px;
+    background: linear-gradient(135deg, #e0f0ff 0%, #f0f8ff 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.dc-quiz-option.selected .dc-quiz-svg-wrap {
+    background: linear-gradient(135deg, #d0eaff 0%, #e6f5ff 100%);
+}
+
+.dc-quiz-svg-wrap svg {
+    width: 80%;
+    height: auto;
+    transition: transform 0.3s ease;
+}
+
+.dc-quiz-option:hover .dc-quiz-svg-wrap svg,
+.dc-quiz-option.selected .dc-quiz-svg-wrap svg {
+    transform: scale(1.05);
+}
+
+/* Budget / text-only illustration area */
+.dc-quiz-dollar-wrap {
+    width: 100%;
+    aspect-ratio: 3 / 2;
+    border-radius: 7px;
+    background: linear-gradient(135deg, #e0f0ff 0%, #f0f8ff 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dc-quiz-dollar-wrap span {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--primary-color, #062055);
+    letter-spacing: 2px;
+    opacity: 0.75;
+    line-height: 1;
+}
+
+.dc-quiz-option.selected .dc-quiz-dollar-wrap {
+    background: linear-gradient(135deg, #d0eaff 0%, #e6f5ff 100%);
+}
+
+.dc-quiz-option.selected .dc-quiz-dollar-wrap span {
+    opacity: 1;
+}
+
+/* Option text */
+.dc-quiz-opt-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--primary-color, #062055);
+    line-height: 1.15;
+}
+
+.dc-quiz-opt-desc {
+    font-size: 0.72rem;
+    color: var(--medium-gray, #666);
+    line-height: 1.4;
+}
+
+/* Checkmark badge */
+.dc-quiz-check {
+    position: absolute;
+    top: 8px; right: 8px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--primary-color, #062055);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.4);
+    transition: opacity 0.2s, transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.4);
+}
+
+.dc-quiz-check svg {
+    stroke: #fff;
+    width: 12px;
+    height: 12px;
+}
+
+.dc-quiz-option.selected .dc-quiz-check {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* ── Navigation row ──────────────────────────────────────────────────────── */
+.dc-quiz-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 1.5rem;
+    gap: 10px;
+}
+
+.dc-quiz-step-counter {
+    font-size: 0.8rem;
+    color: var(--medium-gray, #666);
+    white-space: nowrap;
+}
+
+.dc-quiz-btn-back {
+    padding: 0.7rem 1.25rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-gray, #ddd);
+    background: transparent;
+    color: var(--medium-gray, #666);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.dc-quiz-btn-back:hover,
+.dc-quiz-btn-back:focus {
+    border-color: var(--primary-color, #062055);
+    color: var(--primary-color, #062055);
+    background: transparent;
+}
+
+.dc-quiz-btn-back:disabled,
+.dc-quiz-btn-back[style*="visibility: hidden"] {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.dc-quiz-btn-next {
+    padding: 0.7rem 1.5rem;
+    border-radius: 8px;
+    border: none;
+    background: var(--primary-color, #062055);
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 4px 14px rgba(6, 32, 85, 0.2);
+}
+
+.dc-quiz-btn-next:hover {
+    background: var(--secondary-color, #1471C5);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(20, 113, 197, 0.25);
+}
+
+.dc-quiz-btn-next:disabled {
+    background: var(--border-gray, #ddd);
+    color: var(--medium-gray, #666);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* ── Loading state ───────────────────────────────────────────────────────── */
+.dc-quiz-loading {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--medium-gray, #666);
+    font-size: 0.9rem;
+}
+
+.dc-quiz-loading i {
+    display: block;
+    font-size: 2rem;
+    color: var(--secondary-color, #1471C5);
+    margin-bottom: 0.75rem;
+    animation: dc-spin 1s linear infinite;
+}
+
+@keyframes dc-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Result container ────────────────────────────────────────────────────── */
+.dc-quiz-result {
+    display: none;
+    animation: dcQuizFadeUp 0.4s ease both;
+}
+
+/* ── Result card ─────────────────────────────────────────────────────────── */
+.dc-quiz-result-card {
+    background: #fff;
+    border: 2px solid var(--primary-color, #062055);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
+    margin-bottom: 1.5rem;
+}
+
+.dc-quiz-result-body {
+    padding: 1.5rem;
+}
+
+.dc-quiz-result-eyebrow {
+    font-size: 0.68rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--secondary-color, #1471C5);
+    margin-bottom: 0.25rem;
+}
+
+.dc-quiz-result-title {
+    font-size: clamp(1.5rem, 4vw, 2.2rem);
+    font-weight: 700;
+    color: var(--primary-color, #062055);
+    line-height: 1.1;
+    margin: 0 0 0.3rem;
+}
+
+.dc-quiz-result-tagline {
+    font-size: 0.9rem;
+    color: var(--medium-gray, #666);
+    margin: 0 0 0.75rem;
+}
+
+.dc-quiz-result-why {
+    font-size: 0.9rem;
+    line-height: 1.7;
+    color: var(--medium-gray, #666);
+    margin-bottom: 1.25rem;
+}
+
+/* ── Result stats row ────────────────────────────────────────────────────── */
+.dc-quiz-result-specs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 1.25rem;
+}
+
+.dc-quiz-spec {
+    background: var(--light-gray, #f8f8f8);
+    border: 1px solid var(--border-gray, #ddd);
+    border-radius: 7px;
+    padding: 0.6rem 0.4rem;
+    text-align: center;
+}
+
+.dc-quiz-spec-val {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--secondary-color, #1471C5);
+    letter-spacing: 0.3px;
+}
+
+.dc-quiz-spec-label {
+    font-size: 0.62rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--medium-gray, #666);
+    margin-top: 2px;
+}
+
+/* ── Result actions ──────────────────────────────────────────────────────── */
+.dc-quiz-result-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.dc-quiz-btn-primary {
+    flex: 1;
+    min-width: 160px;
+    padding: 0.85rem 1.25rem;
+    border-radius: 8px;
+    border: none;
+    background: var(--primary-color, #062055);
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    text-decoration: none !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background 0.2s, transform 0.15s;
+    & i {
+        display: inline-block;
+        margin-left: 8px;
+    }
+}
+
+.dc-quiz-btn-primary:hover,
+.dc-quiz-btn-primary:focus {
+    background: var(--secondary-color, #1471C5);
+    color: #fff;
+    transform: translateY(-1px);
+    text-decoration: none !important;
+}
+
+.dc-quiz-btn-secondary {
+    padding: 0.85rem 1.25rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-gray, #ddd);
+    background: transparent;
+    color: var(--medium-gray, #666);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.dc-quiz-btn-secondary:hover,
+.dc-quiz-btn-secondary:focus {
+    border-color: var(--primary-color, #062055);
+    color: var(--primary-color, #062055);
+    background: transparent;
+}
+
+/* ── Matching boats slider ───────────────────────────────────────────────── */
+.dc-quiz-result-boats-heading {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--medium-gray, #666);
+    margin: 0 0 1rem;
+}
+
+.dc-quiz-result-boats-section .dealerschoice-slider {
+    margin-bottom: 0;
+}
+
+/* ── Alternatives (runner-up pill tags) ──────────────────────────────────── */
+.dc-quiz-alts {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border-gray, #ddd);
+}
+
+.dc-quiz-alts-label {
+    font-size: 0.68rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--medium-gray, #666);
+    margin-bottom: 0.6rem;
+}
+
+.dc-quiz-alts-list {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.dc-quiz-alt-tag {
+    padding: 0.35rem 0.85rem;
+    border-radius: 20px;
+    border: 1px solid var(--border-gray, #ddd);
+    font-size: 0.8rem;
+    color: var(--medium-gray, #666);
+    text-decoration: none;
+    transition: border-color 0.2s, color 0.2s;
+}
+
+.dc-quiz-alt-tag:hover {
+    border-color: var(--primary-color, #062055);
+    color: var(--primary-color, #062055);
+    text-decoration: none;
+}
+
+/* ── Lead capture form (optional Gravity Forms integration) ── */
+.dc-quiz-lead-form {
+    margin-top: 2.5rem;
+    padding: 2rem;
+    background: var(--light-gray, #f8f8f8);
+    border-radius: 8px;
+    border: 1px solid var(--border-gray, #ddd);
+}
+
+.dc-quiz-lead-form-heading {
+    margin: 0 0 1.25rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--primary-color, #062055);
+    text-align: center;
+}
+

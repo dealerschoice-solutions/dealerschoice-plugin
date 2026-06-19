@@ -1,0 +1,31 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Plugin archives (generated on release, not tracked)
+*.zip
+*.tar.gz
+
+# Logs
+*.log
+
+# Node (for future JS build tooling)
+node_modules/
+npm-debug.log*
+yarn-error.log
+
+# Composer (for future PHP dependencies)
+/vendor/
+composer.lock
+
+# IDE / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment / local config
+.env
+.env.*

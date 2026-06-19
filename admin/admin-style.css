@@ -1,0 +1,112 @@
+/**
+ * Admin Styles for DealersChoice Plugin
+ * 
+ * Styles for admin interface pages including sync status indicators,
+ * log level colors, and general admin UI enhancements.
+ * 
+ * @package DealersChoice
+ * @subpackage Admin
+ * @since 1.0.0
+ */
+
+/* Sync Status Indicators */
+#sync-status.loading {
+    padding: 15px;
+    background: #fff;
+    border-left: 4px solid #0073aa;
+}
+
+#sync-status.success {
+    padding: 15px;
+    background: #fff;
+    border-left: 4px solid #46b450;
+}
+
+#sync-status.error {
+    padding: 15px;
+    background: #fff;
+    border-left: 4px solid #dc3232;
+}
+
+/* Log Level Colors */
+.error {
+    color: #dc3232;
+    font-weight: bold;
+}
+
+.warning {
+    color: #f56e28;
+    font-weight: bold;
+}
+
+.info {
+    color: #0073aa;
+    font-weight: bold;
+}
+
+/* Rotation Animation for Loading Icons */
+@keyframes rotation {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(359deg);
+    }
+}
+
+.rotating {
+    animation: rotation 2s infinite linear;
+}
+
+/* Toggle Switch for Always Show Price */
+.dc-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+    vertical-align: middle;
+}
+.dc-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.dc-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+    border-radius: 24px;
+}
+.dc-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+    border-radius: 50%;
+}
+.dc-switch input:checked + .dc-slider {
+    background-color: #46b450;
+}
+.dc-switch input:focus + .dc-slider {
+    box-shadow: 0 0 1px #46b450;
+}
+.dc-switch input:checked + .dc-slider:before {
+    -webkit-transform: translateX(26px);
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+}
+.dc-switch-label {
+    margin-left: 10px;
+    vertical-align: middle;
+}
