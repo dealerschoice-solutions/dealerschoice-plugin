@@ -109,6 +109,9 @@ Available commands:
 
 == Changelog ==
 
+= 1.0.1 =
+* Added plugin update notification system
+
 = 1.0.0 =
 * Initial release
 * Automatic inventory sync from DealersChoice API
