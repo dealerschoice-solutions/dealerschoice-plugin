@@ -225,9 +225,6 @@ $dc_update_checker = PucFactory::buildUpdateChecker(
     'dealerschoice'
 );
 $dc_update_checker->setBranch('main');
-if ( defined('DC_GITHUB_TOKEN') && DC_GITHUB_TOKEN ) {
-    $dc_update_checker->setAuthentication( DC_GITHUB_TOKEN );
-}
 $dc_update_checker->getVcsApi()->enableReleaseAssets();
 
 // Load core classes
