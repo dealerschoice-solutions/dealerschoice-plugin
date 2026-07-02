@@ -1752,7 +1752,7 @@ function dealers_choice_gf_stamp_field_attributes($field_content, $field, $value
         return $field_content;
     }
 
-    $known_params = ['inventoryID', 'priceStatus', 'priceValue'];
+    $known_params = ['inventoryID', 'priceStatus', 'priceValue', 'boatName', 'stockNumber'];
     if (!in_array($field->inputName, $known_params, true)) {
         return $field_content;
     }

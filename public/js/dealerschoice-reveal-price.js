@@ -3,6 +3,8 @@
  */
 
 var popupBoatID = '';
+var popupBoatName = '';
+var popupStockNumber = '';
 var currentMessage = '';
 var currentStatus = ''; // Short status stored in the GF hidden field: 'verified', 'out_of_area', or 'unverified'.
 var gfFormSnapshot = null;
@@ -18,6 +20,8 @@ jQuery(document).ready(function($) {
         e.preventDefault();
         var boatID = $(this).data('inventory-id');
         popupBoatID = boatID;
+        popupBoatName = $(this).data('boat-name') || '';
+        popupStockNumber = $(this).data('stock-number') || '';
         currentStatus = '';
         currentMessage = '';
         const allowedZips = settings.allowedZips || [];
@@ -149,6 +153,8 @@ jQuery(document).on('gform_post_render', function(event, form_id, current_page){
     console.log('gform_post_render fired for reveal price form. Populating hidden fields. Boat ID:', popupBoatID, 'Status:', currentMessage);
 
     jQuery('[data-dc-field="inventoryID"]').val(popupBoatID);
+    jQuery('[data-dc-field="boatName"]').val(popupBoatName);
+    jQuery('[data-dc-field="stockNumber"]').val(popupStockNumber);
     // Only populate priceStatus when zip-based verification was performed.
     if (currentStatus) {
         jQuery('[data-dc-field="priceStatus"]').val(currentStatus);

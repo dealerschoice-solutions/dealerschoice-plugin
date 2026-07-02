@@ -147,10 +147,11 @@ class Boat {
         $specs = [];
         if($this->getLocation()){$specs["Location"] = $this->getLocation();}
         if($this->getCondition()){$specs["Condition"] = $this->getCondition();}
-        if($this->getHIN()){$specs["Stock Number"] = $this->getHIN();}
+        if($this->getStockNumber()){$specs["Stock Number"] = $this->getStockNumber();}
         if($this->getYear()){$specs["Year"] = $this->getYear();}
         if($this->getMake()){$specs["Make"] = $this->getMake();}
         if($this->getModel()){$specs["Model"] = $this->getModel();}
+        if($this->getHIN()){$specs["HIN"] = $this->getHIN();}
         if($this->getLength()){$specs["Model Length"] = $this->getFormattedLength();}
         if($this->getType()){$specs["Type"] = $this->getType();}
         if($this->getField('engine_make')){$specs["Motor Make"] = $this->getField('engine_make');}
@@ -162,10 +163,11 @@ class Boat {
         if($this->getStatus()){$specs["Status"] = $this->getStatus();}
         if($this->getLocation()){$specs["Location"] = $this->getLocation();}
         if($this->getCondition()){$specs["Condition"] = $this->getCondition();}
-        if($this->getHIN()){$specs["Stock Number"] = $this->getHIN();}
+        if($this->getStockNumber()){$specs["Stock Number"] = $this->getStockNumber();}
         if($this->getYear()){$specs["Year"] = $this->getYear();}
         if($this->getMake()){$specs["Make"] = $this->getMake();}
         if($this->getModel()){$specs["Model"] = $this->getModel();}
+        if($this->getHIN()){$specs["HIN"] = $this->getHIN();}
         if($this->getLength()){$specs["Model Length"] = $this->getFormattedLength();}
         if($this->getType()){$specs["Type"] = $this->getType();}
         if($this->getMainColor()){$specs["Main Color"] = $this->getMainColor();}
