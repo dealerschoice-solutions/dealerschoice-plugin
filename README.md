@@ -282,6 +282,12 @@ While the plugin software is GPL-licensed, access to our premium services, API e
 
 ## Changelog
 
+### 1.0.2
+- Updated the reveal price popup system to include the stock number and boat name to pass to the form notification.
+
+### 1.0.1
+- Added plugin update checker
+
 ### 1.0.0
 - Initial release
 - Automatic inventory sync from DealersChoice API

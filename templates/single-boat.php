@@ -191,7 +191,7 @@ while (have_posts()) : the_post();
                                             <?php endif; ?>
                                         <?php else: ?>
                                             <?php if ($price && $price !== '0.00'): ?>
-                                                <p class="boat-price"><button class="boat-price-popup-button" data-inventory-id="<?php echo esc_attr( get_the_ID() ); ?>">Reveal Price</button></p>
+                                                <p class="boat-price"><button class="boat-price-popup-button" data-inventory-id="<?php echo esc_attr( get_the_ID() ); ?>" data-boat-name="<?php the_title_attribute(); ?>" data-stock-number="<?php echo esc_attr( $stock_number ); ?>">Reveal Price</button></p>
                                             <?php else: ?>
                                                 <p class="boat-price">Contact Us for Our Price</p>
                                             <?php endif; ?>
