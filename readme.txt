@@ -108,6 +108,11 @@ Available commands:
 * `wp dealers-choice stats` - Display plugin statistics
 
 == Changelog ==
+### 1.0.3
+- Updated check for shortcodes to ensure proper enqueuing of scripts and styles.
+
+### 1.0.2
+- Updated the reveal price popup system to include the stock number and boat name to pass to the form notification.
 
 = 1.0.1 =
 * Added plugin update notification system
@@ -127,6 +132,14 @@ Available commands:
 * ACF dependency check with admin notice
 
 == Upgrade Notice ==
+### 1.0.3
+- Updated check for shortcodes to ensure proper enqueuing of scripts and styles.
+
+### 1.0.2
+- Updated the reveal price popup system to include the stock number and boat name to pass to the form notification.
+
+### 1.0.1
+- Added plugin update checker
 
 = 1.0.0 =
 Initial release of DealersChoice Solutions plugin.

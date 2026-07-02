@@ -3,7 +3,7 @@
  * Plugin Name: DealersChoice Solutions
  * Plugin URI: https://www.dealerschoicesolutions.com
  * Description: A comprehensive dealership inventory management plugin that syncs boat listings from your DMS to WordPress with automatic categorization, image management, and advanced filtering.
- * Version: 1.0.1
+ * Version: 1.0.3
  * Author: DealersChoice, by Mannix Marketing
  * Author URI: https://www.dealerschoicesolutions.com
  * License: GPL2
@@ -212,7 +212,7 @@ function dealers_choice_acf_admin_notice() {
 // Define plugin constants
 define('DC_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('DC_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('DC_VERSION', '1.0.2');
+define('DC_VERSION', '1.0.3');
 
 // Plugin Update Checker — polls DealersChoice PUC Server for releases and triggers updates in WP Admin.
 require_once DC_PLUGIN_DIR . 'lib/plugin-update-checker/load-v5p7.php';
@@ -1547,6 +1547,36 @@ function dealers_choice_auto_sync_inventory() {
 add_filter('template_include', ['\DC\Template_Loader', 'template_include']);
 
 /**
+ * Check whether a post contains a given shortcode, looking beyond post_content
+ * into ACF field values (stored as postmeta) since shortcodes are often placed
+ * inside ACF fields (e.g. WYSIWYG/text fields, repeaters) rather than the main editor.
+ */
+function dealers_choice_post_has_shortcode($post_id, $shortcode_tag) {
+    $post_id = (int) $post_id;
+    if (!$post_id) {
+        return false;
+    }
+
+    if (has_shortcode((string) get_post_field('post_content', $post_id), $shortcode_tag)) {
+        return true;
+    }
+
+    foreach (get_post_meta($post_id) as $meta_key => $meta_values) {
+        // Skip ACF's internal "_fieldname" reference keys, which store field keys, not content.
+        if (strpos($meta_key, '_') === 0) {
+            continue;
+        }
+        foreach ($meta_values as $meta_value) {
+            if (is_string($meta_value) && has_shortcode($meta_value, $shortcode_tag)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
  * Enqueue public styles and scripts
  */
 function dealers_choice_enqueue_public_assets() {
@@ -1692,7 +1722,7 @@ function dealers_choice_enqueue_public_assets() {
             ));
         }
 
-    } elseif (is_singular() && has_shortcode(get_post()->post_content, 'dealerschoice_inventory')) {
+    } elseif (is_singular() && dealers_choice_post_has_shortcode(get_the_ID(), 'dealerschoice_inventory')) {
         $show_price = get_option('dealers_choice_always_show_price', true);
         // Check for shortcode on singular pages (posts/pages)
         wp_enqueue_style('font-awesome-free');
@@ -1843,11 +1873,11 @@ function dealers_choice_body_classes($classes) {
         $classes[] = 'dealerschoice-single';
         // Remove blog class if present
         $classes = array_diff($classes, ['blog']);
-    } elseif (is_singular() && has_shortcode(get_post()->post_content, 'dealerschoice_inventory')) {
+    } elseif (is_singular() && dealers_choice_post_has_shortcode(get_the_ID(), 'dealerschoice_inventory')) {
         $classes[] = 'dealerschoice-inventory-page';
         // Remove blog class to prevent theme blog styles from interfering
         $classes = array_diff($classes, ['blog']);
-    } elseif (is_singular() && has_shortcode(get_post()->post_content, 'dealerschoice_favorites')) {
+    } elseif (is_singular() && dealers_choice_post_has_shortcode(get_the_ID(), 'dealerschoice_favorites')) {
         $classes[] = 'dealerschoice-inventory-page';
         // Remove blog class to prevent theme blog styles from interfering
         $classes = array_diff($classes, ['blog']);

@@ -281,6 +281,8 @@ This plugin is distributed in the hope that it will be useful, but WITHOUT ANY W
 While the plugin software is GPL-licensed, access to our premium services, API endpoints, updates, and support requires a separate paid subscription governed by our [Terms of Service](https://www.dealerschoicesolutions.com/terms-of-use/).
 
 ## Changelog
+### 1.0.3
+- Updated check for shortcodes to ensure proper enqueuing of scripts and styles.
 
 ### 1.0.2
 - Updated the reveal price popup system to include the stock number and boat name to pass to the form notification.
