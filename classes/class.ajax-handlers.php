@@ -62,6 +62,10 @@ class AJAX_Handlers {
         add_action('wp_ajax_get_filter_counts', [__CLASS__, 'get_filter_counts']);
         add_action('wp_ajax_nopriv_get_filter_counts', [__CLASS__, 'get_filter_counts']);
 
+        // Extends the inventory search ('s' param) to also match ACF fields
+        // like Stock Number and HIN, not just post title/content.
+        add_filter('posts_search', [__CLASS__, 'search_stock_and_hin'], 10, 2);
+
         add_action('wp_ajax_reveal_price', [__CLASS__, 'reveal_price']);
         add_action('wp_ajax_nopriv_reveal_price', [__CLASS__, 'reveal_price']);
 
@@ -481,6 +485,48 @@ class AJAX_Handlers {
     }
 
     /**
+     * Extend WP's default search WHERE clause to also match extra postmeta
+     * keys (Stock Number, HIN) so salespeople can pull up a listing by
+     * either value, in addition to the existing title/content search.
+     *
+     * Only applies to queries that set the 'dc_search_extra_meta_keys' arg
+     * via build_inventory_query_args(), so other searches on the site are
+     * unaffected.
+     *
+     * @param string $search WP's generated search WHERE clause, e.g. " AND (...) ".
+     * @param \WP_Query $query Current query.
+     * @return string Modified WHERE clause.
+     */
+    public static function search_stock_and_hin($search, $query) {
+        global $wpdb;
+
+        $meta_keys = $query->get('dc_search_extra_meta_keys');
+        $term = $query->get('s');
+
+        if (empty($search) || empty($meta_keys) || $term === '') {
+            return $search;
+        }
+
+        // WP wraps its own search clause as " AND (...) ". OR our EXISTS
+        // check into that same parenthesis so it stays ANDed with the rest
+        // of the query (e.g. post_type, tax_query) but ORs with the
+        // title/content match.
+        if (!preg_match('/^\s*AND\s*\((.*)\)\s*$/s', $search, $matches)) {
+            return $search;
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($meta_keys), '%s'));
+        $like = '%' . $wpdb->esc_like($term) . '%';
+
+        $exists = $wpdb->prepare(
+            "OR EXISTS (SELECT 1 FROM {$wpdb->postmeta} dc_sm WHERE dc_sm.post_id = {$wpdb->posts}.ID AND dc_sm.meta_key IN ({$placeholders}) AND dc_sm.meta_value LIKE %s)",
+            array_merge($meta_keys, [$like])
+        );
+
+        return " AND ({$matches[1]} {$exists}) ";
+    }
+
+    /**
      * Build WP_Query arguments based on filters and search parameters
      *
      * @param array $filters Filter selections
@@ -512,6 +558,9 @@ class AJAX_Handlers {
             // Add search query
             if (!empty($search_query)) {
                 $args['s'] = $search_query;
+                // Flag consumed by search_stock_and_hin() so the search also
+                // matches these ACF fields, not just post title/content.
+                $args['dc_search_extra_meta_keys'] = ['boat_stock_number', 'boat_hin'];
             }
 
             // Build tax query from filters

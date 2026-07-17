@@ -281,6 +281,13 @@ This plugin is distributed in the hope that it will be useful, but WITHOUT ANY W
 While the plugin software is GPL-licensed, access to our premium services, API endpoints, updates, and support requires a separate paid subscription governed by our [Terms of Service](https://www.dealerschoicesolutions.com/terms-of-use/).
 
 ## Changelog
+### 1.0.4
+- Fixed image sync to store last image sync only on successful sync
+- Fixed image sync to use a proper file extension when a URL does not include extension
+- Updated search functionality to include search by HIN or Stock Number
+- Added Custom Offers settings to the plugin settings display
+- Fixed display of Favorites graph
+
 ### 1.0.3
 - Updated check for shortcodes to ensure proper enqueuing of scripts and styles.
 

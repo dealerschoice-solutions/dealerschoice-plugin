@@ -248,7 +248,7 @@ function dealers_choice_favorites_page() {
             <canvas id="dc-fav-chart" height="80"></canvas>
         </div>
         <script>
-        (function() {
+        document.addEventListener('DOMContentLoaded', function() {
             var ctx = document.getElementById('dc-fav-chart');
             if (!ctx || typeof Chart === 'undefined') return;
             new Chart(ctx, {
@@ -282,7 +282,7 @@ function dealers_choice_favorites_page() {
                     scales:  { y: { beginAtZero: true, ticks: { precision: 0 } } }
                 }
             });
-        })();
+        });
         </script>
         <?php endif; ?>
 
