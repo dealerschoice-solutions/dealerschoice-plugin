@@ -235,10 +235,13 @@ class InventorySync {
                     ]);
                 }
 
-                $this->update_acf_fields($post_id, $boat_data, $should_process_images);
+                $update_result = $this->update_acf_fields($post_id, $boat_data, $should_process_images);
                 $this->update_taxonomies($post_id, $boat_data);
 
-                if ($should_process_images) {
+                // Only stamp the photo sync timestamp if the images actually synced successfully;
+                // otherwise a failed image (e.g. download/upload error) would be marked as synced
+                // and never retried on subsequent syncs.
+                if ($should_process_images && !empty($update_result['images_synced'])) {
                     update_post_meta($post_id, '_last_photo_sync_ts', $effective_last_update > 0 ? $effective_last_update : time());
                 }
             }
@@ -253,6 +256,7 @@ class InventorySync {
      * @param int   $post_id   The ID of the post to update.
      * @param object $data The data for the boat.
      * @param bool $process_images Whether to process images for this boat.
+     * @return array{images_synced: bool} Whether all images were successfully synced (or skipped).
      */
     public function update_acf_fields($post_id, $data, $process_images = false) {
         // Helper function to safely get value or empty string
@@ -385,10 +389,13 @@ class InventorySync {
         }
         
         $gallery_ids = [];
+        $images_synced_successfully = true;
         if ($process_images) {
             // Process images and set featured image
-            $gallery_ids = $this->process_images($images_array);
-            
+            $images_result = $this->process_images($images_array);
+            $gallery_ids = $images_result['ids'];
+            $images_synced_successfully = $images_result['success'];
+
             // Set first image as featured image if available
             if (!empty($gallery_ids) && is_array($gallery_ids)) {
                 $first_image_id = $gallery_ids[0];
@@ -479,6 +486,8 @@ class InventorySync {
         foreach ($acf_fields as $key => $value) {
             update_field($key, $value, $post_id);
         }
+
+        return ['images_synced' => $images_synced_successfully];
     }
 
     /**
@@ -636,10 +645,11 @@ class InventorySync {
      */
     private function process_images($image_urls) {
         if (!is_array($image_urls) || empty($image_urls)) {
-            return [];
+            return ['ids' => [], 'success' => true];
         }
 
         $attachment_ids = [];
+        $has_failure = false;
 
         foreach ($image_urls as $image_url) {
             if (empty($image_url)) {
@@ -648,7 +658,7 @@ class InventorySync {
 
             // Check if image already exists in media library
             $existing_attachment = $this->get_attachment_by_url($image_url);
-            
+
             if ($existing_attachment) {
                 $attachment_ids[] = $existing_attachment;
                 continue;
@@ -658,10 +668,12 @@ class InventorySync {
             $attachment_id = $this->download_and_attach_image($image_url);
             if ($attachment_id) {
                 $attachment_ids[] = $attachment_id;
+            } else {
+                $has_failure = true;
             }
         }
 
-        return $attachment_ids;
+        return ['ids' => $attachment_ids, 'success' => !$has_failure];
     }
 
     /**
@@ -751,6 +763,7 @@ class InventorySync {
         // Ensure we have a valid extension
         if (empty($file_ext)) {
             $file_ext = 'jpg'; // Default to jpg if no extension is found
+            $filename .= '.' . $file_ext;
         }
 
         // WordPress allows .jpg but not .jpeg — normalize before sideload

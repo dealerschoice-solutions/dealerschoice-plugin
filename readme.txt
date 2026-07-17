@@ -108,6 +108,13 @@ Available commands:
 * `wp dealers-choice stats` - Display plugin statistics
 
 == Changelog ==
+### 1.0.4
+- Fixed image sync to store last image sync only on successful sync
+- Fixed image sync to use a proper file extension when a URL does not include extension
+- Updated search functionality to include search by HIN or Stock Number
+- Added Custom Offers settings to the plugin settings display
+- Fixed display of Favorites graph
+
 ### 1.0.3
 - Updated check for shortcodes to ensure proper enqueuing of scripts and styles.
 

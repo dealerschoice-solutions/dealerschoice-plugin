@@ -26,6 +26,8 @@
  * - dealers_choice_always_show_price: Toggle to always show price
  * - dealers_choice_show_favorites: Toggle to show favorites
  * - dealers_choice_popup_form_id: Popup form ID for price inquiries
+ * - dealerschoice_sales_cta_popup_id: Popup Maker popup ID for the inventory view tracker special offer
+ * - dealerschoice_inventory_view_limit: Number of views before the special offer popup is triggered
  * 
  * Validation Endpoint:
  * - URL: https://dealerschoiceims.securem2.com/api/v1/validate
@@ -141,6 +143,20 @@ function dealers_choice_process_settings_form() {
     // Display Settings: Save 'Show Favorites' option
     $show_favorites = isset($_POST['dealers_choice_show_favorites']) ? '1' : '0';
     update_option('dealers_choice_show_favorites', $show_favorites);
+
+    // Inventory View Tracker: Save Popup Maker popup ID and view limit
+    $sales_cta_popup_id = isset($_POST['dealerschoice_sales_cta_popup_id']) ? sanitize_text_field($_POST['dealerschoice_sales_cta_popup_id']) : '';
+    if ($sales_cta_popup_id !== '') {
+        update_option('dealerschoice_sales_cta_popup_id', $sales_cta_popup_id);
+    } else {
+        delete_option('dealerschoice_sales_cta_popup_id');
+    }
+
+    $inventory_view_limit = isset($_POST['dealerschoice_inventory_view_limit']) ? intval($_POST['dealerschoice_inventory_view_limit']) : 5;
+    if ($inventory_view_limit < 1) {
+        $inventory_view_limit = 5;
+    }
+    update_option('dealerschoice_inventory_view_limit', $inventory_view_limit);
 
     // Display Settings: Save default sort order
     $allowed_sorts = ['date-desc', 'date-asc', 'price-asc', 'price-desc', 'year-desc', 'year-asc', 'length-desc', 'length-asc', 'title-asc', 'title-desc'];
@@ -275,6 +291,8 @@ function dealers_choice_settings_page() {
     ];
     $popup_form_id = get_option('dealers_choice_popup_form_id', '');
     $reveal_price_gravity_form_id = get_option('dealers_choice_reveal_price_gravity_form_id', '');
+    $sales_cta_popup_id = get_option('dealerschoice_sales_cta_popup_id', '');
+    $inventory_view_limit = get_option('dealerschoice_inventory_view_limit', 5);
     $allowed_zips = get_option('dealers_choice_allowed_zips', '');
     $location_request_message = get_option('dealers_choice_location_request_message', 'In order to comply with manufacturer pricing policies, we need to verify your location. Please allow location access to continue.');
     $location_verified_message = get_option('dealers_choice_location_verified_message', 'Your location has been verified. Please fill out the form to reveal the price.');
@@ -393,6 +411,24 @@ function dealers_choice_settings_page() {
                     <td>
                         <textarea name="dealers_choice_location_denied_message" id="dealers_choice_location_denied_message" class="large-text" rows="5"><?php echo esc_textarea( stripslashes( get_option( 'dealers_choice_location_denied_message', 'Geolocation is not supported by your browser. Please contact us for pricing information.' ) ) ); ?></textarea>
                         <p class="description">The message to display when the user denies location access, or their browser does not support geolocation. Default: "Geolocation is not supported by your browser. Please contact us for pricing information."</p>
+                    </td>
+                </tr>
+                <tr id="sales-cta-popup-id-row">
+                    <th scope="row">
+                        <label for="dealerschoice_sales_cta_popup_id"><?php _e('Special Offer Popup Maker ID', 'dealers-choice'); ?></label>
+                    </th>
+                    <td>
+                        <input type="text" id="dealerschoice_sales_cta_popup_id" name="dealerschoice_sales_cta_popup_id" value="<?php echo esc_attr($sales_cta_popup_id); ?>" class="regular-text" />
+                        <p class="description"><?php _e('Enter the ID of the Popup Maker popup to show as a special offer once a visitor has viewed an inventory item enough times. Leave blank to disable the inventory view tracker.', 'dealers-choice'); ?></p>
+                    </td>
+                </tr>
+                <tr id="inventory-view-limit-row">
+                    <th scope="row">
+                        <label for="dealerschoice_inventory_view_limit"><?php _e('Inventory View Limit', 'dealers-choice'); ?></label>
+                    </th>
+                    <td>
+                        <input type="number" min="1" id="dealerschoice_inventory_view_limit" name="dealerschoice_inventory_view_limit" value="<?php echo esc_attr($inventory_view_limit); ?>" class="small-text" />
+                        <p class="description"><?php _e('Number of times a visitor must view the same inventory item (tracked per-browser) before the special offer popup is triggered. Default: 5.', 'dealers-choice'); ?></p>
                     </td>
                 </tr>
                 <tr id="price-unavailable-message-row">
