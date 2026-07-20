@@ -281,6 +281,9 @@ This plugin is distributed in the hope that it will be useful, but WITHOUT ANY W
 While the plugin software is GPL-licensed, access to our premium services, API endpoints, updates, and support requires a separate paid subscription governed by our [Terms of Service](https://www.dealerschoicesolutions.com/terms-of-use/).
 
 ## Changelog
+### 1.0.5
+- Added boat weight sync and display
+
 ### 1.0.4
 - Fixed image sync to store last image sync only on successful sync
 - Fixed image sync to use a proper file extension when a URL does not include extension
