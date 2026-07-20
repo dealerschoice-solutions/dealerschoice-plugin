@@ -462,6 +462,7 @@ class InventorySync {
             'field_boat_loan_term' => $get_value($data->LoanTerm),
             'field_boat_length' => (string) $get_value($data->Length),
             'field_boat_length_inches' => convertLengthToInches($get_value($data->Length)),
+            'field_boat_weight' => (string) $get_value($data->DryWeight),
             'field_engine_hours' => $get_numeric($data->EngineHours, 1),
             'field_engine_make' => (string) $get_value($data->EngineMake),
             'field_engine_hp' => $get_value($data->EngineHP),

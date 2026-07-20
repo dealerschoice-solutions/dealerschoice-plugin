@@ -169,6 +169,7 @@ class Boat {
         if($this->getModel()){$specs["Model"] = $this->getModel();}
         if($this->getHIN()){$specs["HIN"] = $this->getHIN();}
         if($this->getLength()){$specs["Model Length"] = $this->getFormattedLength();}
+        if($this->getWeight()){$specs["Weight"] = $this->getWeight();}
         if($this->getType()){$specs["Type"] = $this->getType();}
         if($this->getMainColor()){$specs["Main Color"] = $this->getMainColor();}
         if($this->getAccentColor()){$specs["Accent Color"] = $this->getAccentColor();}
@@ -177,7 +178,7 @@ class Boat {
         if($this->getField('engine_hp')){$specs["Total Horsepower"] = $this->getField('engine_hp');}
         if($this->getField('engine_hours') && !empty($this->getField('engine_hours')) && $this->getField('engine_hours') !== '0.0'){$specs["Engine Hours"] = $this->getField('engine_hours');}
         if($this->getField('boat_person_capacity')){$specs["Person Capacity"] = $this->getField('boat_person_capacity') . ' People';}
-        //if($this->get()){$specs["Category"] = $this->get();}
+        //if($this->getSpec()){$specs["Spec"] = $this->getSpec();}
         return $specs;
     }
 
