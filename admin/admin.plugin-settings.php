@@ -25,6 +25,10 @@
  * - dealers_choice_value_your_trade_page_id: Page ID for Value Your Trade form
  * - dealers_choice_always_show_price: Toggle to always show price
  * - dealers_choice_show_favorites: Toggle to show favorites
+ * - dealers_choice_show_finance_calculator: Toggle to show the quick finance calculator on single boat pages
+ * - dealers_choice_finance_default_rate: Default APR (%) pre-filled in both finance calculators
+ * - dealers_choice_finance_default_term: Default loan term (months) pre-filled in both finance calculators
+ * - dealers_choice_finance_default_down_payment_percent: Default down payment (% of price) pre-filled in both finance calculators
  * - dealers_choice_popup_form_id: Popup form ID for price inquiries
  * - dealerschoice_sales_cta_popup_id: Popup Maker popup ID for the inventory view tracker special offer
  * - dealerschoice_inventory_view_limit: Number of views before the special offer popup is triggered
@@ -143,6 +147,32 @@ function dealers_choice_process_settings_form() {
     // Display Settings: Save 'Show Favorites' option
     $show_favorites = isset($_POST['dealers_choice_show_favorites']) ? '1' : '0';
     update_option('dealers_choice_show_favorites', $show_favorites);
+
+    // Finance Calculator: Save toggle for quick calculator on single boat pages
+    $show_finance_calculator = isset($_POST['dealers_choice_show_finance_calculator']) ? '1' : '0';
+    update_option('dealers_choice_show_finance_calculator', $show_finance_calculator);
+
+    // Finance Calculator: Save default APR (%), clamped 0-30
+    $finance_default_rate = isset($_POST['dealers_choice_finance_default_rate']) ? (float) $_POST['dealers_choice_finance_default_rate'] : 7.99;
+    if ($finance_default_rate < 0 || $finance_default_rate > 30) {
+        $finance_default_rate = 7.99;
+    }
+    update_option('dealers_choice_finance_default_rate', $finance_default_rate);
+
+    // Finance Calculator: Save default loan term (months) - must be one of the valid term presets
+    $valid_terms = array_keys(\DC\Shortcodes::get_finance_term_options());
+    $finance_default_term = isset($_POST['dealers_choice_finance_default_term']) ? intval($_POST['dealers_choice_finance_default_term']) : 240;
+    if (!in_array($finance_default_term, $valid_terms, true)) {
+        $finance_default_term = 240;
+    }
+    update_option('dealers_choice_finance_default_term', $finance_default_term);
+
+    // Finance Calculator: Save default down payment (% of price), clamped 0-99
+    $finance_default_down_payment_percent = isset($_POST['dealers_choice_finance_default_down_payment_percent']) ? (float) $_POST['dealers_choice_finance_default_down_payment_percent'] : 20;
+    if ($finance_default_down_payment_percent < 0 || $finance_default_down_payment_percent > 99) {
+        $finance_default_down_payment_percent = 20;
+    }
+    update_option('dealers_choice_finance_default_down_payment_percent', $finance_default_down_payment_percent);
 
     // Inventory View Tracker: Save Popup Maker popup ID and view limit
     $sales_cta_popup_id = isset($_POST['dealerschoice_sales_cta_popup_id']) ? sanitize_text_field($_POST['dealerschoice_sales_cta_popup_id']) : '';
@@ -276,6 +306,11 @@ function dealers_choice_settings_page() {
     // Display Settings: Get current values
     $always_show_price = get_option('dealers_choice_always_show_price', '1');
     $show_favorites = get_option('dealers_choice_show_favorites', '1');
+    $show_finance_calculator = get_option('dealers_choice_show_finance_calculator', '0');
+    $finance_default_rate = get_option('dealers_choice_finance_default_rate', 7.99);
+    $finance_default_term = get_option('dealers_choice_finance_default_term', 240);
+    $finance_default_down_payment_percent = get_option('dealers_choice_finance_default_down_payment_percent', 20);
+    $finance_term_options = \DC\Shortcodes::get_finance_term_options();
     $default_sort = get_option('dealers_choice_default_sort', 'date-desc');
     $sort_options = [
         'date-desc'   => 'Newest First',
@@ -326,6 +361,48 @@ function dealers_choice_settings_page() {
                         </label>
                         <span class="dc-switch-label"><?php _e('Show favorites button on inventory items', 'dealers-choice'); ?></span>
                         <p class="description"><?php _e('If checked, the favorites button will be displayed on inventory items.', 'dealers-choice'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><?php _e('Show Finance Calculator', 'dealers-choice'); ?></th>
+                    <td>
+                        <label class="dc-switch">
+                            <input type="checkbox" id="dealers_choice_show_finance_calculator" name="dealers_choice_show_finance_calculator" value="1" <?php checked($show_finance_calculator, '1'); ?> />
+                            <span class="dc-slider"></span>
+                        </label>
+                        <span class="dc-switch-label"><?php _e('Show quick finance calculator on single boat pages', 'dealers-choice'); ?></span>
+                        <p class="description"><?php _e('Only displays when the boat has a visible price and does not already have dealer-supplied financing data from the inventory feed.', 'dealers-choice'); ?></p>
+                    </td>
+                </tr>
+                <tr id="finance-default-rate-row">
+                    <th scope="row">
+                        <label for="dealers_choice_finance_default_rate"><?php _e('Default Interest Rate (APR %)', 'dealers-choice'); ?></label>
+                    </th>
+                    <td>
+                        <input type="number" step="0.01" min="0" max="30" id="dealers_choice_finance_default_rate" name="dealers_choice_finance_default_rate" value="<?php echo esc_attr($finance_default_rate); ?>" class="small-text" />
+                        <p class="description"><?php _e('Pre-fills the interest rate field on both finance calculators. Visitors can still type a custom rate. Default: 7.99.', 'dealers-choice'); ?></p>
+                    </td>
+                </tr>
+                <tr id="finance-default-term-row">
+                    <th scope="row">
+                        <label for="dealers_choice_finance_default_term"><?php _e('Default Loan Term', 'dealers-choice'); ?></label>
+                    </th>
+                    <td>
+                        <select id="dealers_choice_finance_default_term" name="dealers_choice_finance_default_term">
+                            <?php foreach ($finance_term_options as $months => $label): ?>
+                                <option value="<?php echo esc_attr($months); ?>" <?php selected((int) $finance_default_term, $months); ?>><?php echo esc_html($label); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <p class="description"><?php _e('Pre-fills the loan term dropdown on both finance calculators. Default: 240 months (20 years).', 'dealers-choice'); ?></p>
+                    </td>
+                </tr>
+                <tr id="finance-default-down-payment-row">
+                    <th scope="row">
+                        <label for="dealers_choice_finance_default_down_payment_percent"><?php _e('Default Down Payment (%)', 'dealers-choice'); ?></label>
+                    </th>
+                    <td>
+                        <input type="number" step="0.01" min="0" max="99" id="dealers_choice_finance_default_down_payment_percent" name="dealers_choice_finance_default_down_payment_percent" value="<?php echo esc_attr($finance_default_down_payment_percent); ?>" class="small-text" />
+                        <p class="description"><?php _e('Pre-fills the down payment field as a percentage of the amount financed on both finance calculators. Visitors can still enter a custom amount. Default: 20.', 'dealers-choice'); ?></p>
                     </td>
                 </tr>
                 <tr>

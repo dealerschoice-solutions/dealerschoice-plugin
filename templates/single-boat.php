@@ -26,7 +26,9 @@ $show_price = get_option('dealers_choice_always_show_price', '0') === '1';
 $popup_form_id = get_option('dealers_choice_price_popup_form_id', '');
 $price_display_override = get_field('hide_sale_price');
 
-$show_favorites = get_option('dealers_choice_show_favorites', '1') === '1'; 
+$show_favorites = get_option('dealers_choice_show_favorites', '1') === '1';
+
+$show_finance_calculator = get_option('dealers_choice_show_finance_calculator', '0') === '1';
 
 // Enqueue Slick slider scripts and styles
 wp_enqueue_style( 'dealerschoice-slick' );
@@ -221,6 +223,10 @@ while (have_posts()) : the_post();
                                         <?php endforeach; ?>
                                     </dl>
                                 </div>
+                                <?php endif; ?>
+
+                                <?php if ($show_finance_calculator): ?>
+                                    <?php echo \DC\Shortcodes::render_quick_finance_calculator($boat); ?>
                                 <?php endif; ?>
 
                                 <?php do_action('dealerschoice_after_boat_info'); ?>

@@ -281,6 +281,9 @@ This plugin is distributed in the hope that it will be useful, but WITHOUT ANY W
 While the plugin software is GPL-licensed, access to our premium services, API endpoints, updates, and support requires a separate paid subscription governed by our [Terms of Service](https://www.dealerschoicesolutions.com/terms-of-use/).
 
 ## Changelog
+### 1.0.6
+- Added boat finance calculator with two options: full financial data and quick calculator on the single boat listing
+
 ### 1.0.5
 - Added boat weight sync and display
 
