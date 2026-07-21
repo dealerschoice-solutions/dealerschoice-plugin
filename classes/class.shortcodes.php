@@ -675,6 +675,7 @@ class Shortcodes {
         $default_term     = self::get_default_finance_term();
         $down_payment_pct = self::get_default_finance_down_payment_percent();
         $term_options     = self::get_finance_term_options();
+        $disclaimer       = self::get_finance_calculator_disclaimer();
         $instance_id      = 'dc-finance-calc-' . wp_unique_id();
 
         // Only pre-compute a down payment when we already know the amount;
@@ -686,7 +687,7 @@ class Shortcodes {
         ob_start();
         Template_Loader::get_template(
             'shortcodes/finance-calculator.php',
-            compact( 'title', 'default_amount', 'default_rate', 'default_term', 'down_payment_pct', 'default_down_payment', 'term_options', 'instance_id' )
+            compact( 'title', 'default_amount', 'default_rate', 'default_term', 'down_payment_pct', 'default_down_payment', 'term_options', 'disclaimer', 'instance_id' )
         );
         return ob_get_clean();
     }
@@ -731,13 +732,14 @@ class Shortcodes {
         $default_term          = self::get_default_finance_term();
         $down_payment_pct      = self::get_default_finance_down_payment_percent();
         $term_options          = self::get_finance_term_options();
+        $disclaimer            = self::get_finance_calculator_disclaimer();
         $instance_id           = 'dc-finance-calc-quick-' . $boat->getPostID();
         $default_down_payment  = round( $price * $down_payment_pct / 100, 2 );
 
         ob_start();
         Template_Loader::get_template(
             'shortcodes/finance-calculator-quick.php',
-            compact( 'price', 'default_rate', 'default_term', 'down_payment_pct', 'default_down_payment', 'term_options', 'instance_id' )
+            compact( 'price', 'default_rate', 'default_term', 'down_payment_pct', 'default_down_payment', 'term_options', 'disclaimer', 'instance_id' )
         );
         return ob_get_clean();
     }
@@ -768,6 +770,37 @@ class Shortcodes {
      */
     public static function get_default_finance_down_payment_percent() {
         return (float) get_option( 'dealers_choice_finance_default_down_payment_percent', 20 );
+    }
+
+    /**
+     * Disclaimer text shown below both finance calculators, editable in
+     * Settings. Falls back to get_default_finance_disclaimer() when the
+     * dealer hasn't customised it.
+     *
+     * @return string May contain basic HTML (saved via wp_kses_post) - escape
+     *                on output with wp_kses_post(), not esc_html().
+     */
+    public static function get_finance_calculator_disclaimer() {
+        return get_option( 'dealers_choice_finance_calculator_disclaimer', self::get_default_finance_disclaimer() );
+    }
+
+    /**
+     * Default disclaimer text for the finance calculators. Called both here
+     * and from the admin settings page (as the get_option() fallback) so the
+     * default copy only lives in one place.
+     *
+     * Explicitly calls out down payment, credit, price, and promotional
+     * variability, and that tax/title/destination/other fees are excluded -
+     * the calculators have no tax-rate input, so this is the only place
+     * that caveat is communicated to the visitor.
+     *
+     * @return string
+     */
+    public static function get_default_finance_disclaimer() {
+        return __(
+            'This calculator provides an estimate for informational purposes only and is not an offer of credit. Your actual payment may vary based on several factors such as down payment, credit history, final price, available promotional programs and incentives. Applicable tag, title, destination charges, taxes and other fees and incentives are not included in this estimate. Contact us for your actual rate and payment terms.',
+            'dealerschoice'
+        );
     }
 
     /**

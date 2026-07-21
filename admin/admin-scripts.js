@@ -97,6 +97,22 @@
             $priceToggle.on('change', toggleRevealPriceFields);
             toggleRevealPriceFields();
         }
+
+        // Show/hide Finance Calculator default fields based on Show Finance Calculator toggle
+        if ($('#dealers_choice_show_finance_calculator').length) {
+            var $financeToggle = $('#dealers_choice_show_finance_calculator');
+            var $financeRows = $('#finance-default-rate-row, #finance-default-term-row, #finance-default-down-payment-row, #finance-calculator-disclaimer-row');
+
+            function toggleFinanceCalculatorFields() {
+                if ($financeToggle.is(':checked')) {
+                    $financeRows.show();
+                } else {
+                    $financeRows.hide();
+                }
+            }
+            $financeToggle.on('change', toggleFinanceCalculatorFields);
+            toggleFinanceCalculatorFields();
+        }
     });
 
 })(jQuery);

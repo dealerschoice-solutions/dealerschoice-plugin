@@ -108,6 +108,9 @@ Available commands:
 * `wp dealers-choice stats` - Display plugin statistics
 
 == Changelog ==
+### 1.0.7
+- Minor plugin settings and display updates
+
 ### 1.0.6
 - Added boat finance calculator with two options: full financial data and quick calculator on the single boat listing
 
