@@ -114,6 +114,9 @@
     background: var(--light-gray);
     border: 1px solid var(--border-gray);
     border-radius: 6px;
+    & > *:last-child {
+        margin-bottom: 0;
+    }
 }
 
 .dc-finance-headline {

@@ -110,3 +110,24 @@
     margin-left: 10px;
     vertical-align: middle;
 }
+
+/* Settings Page - Grouped Setting Cards */
+.dc-settings-group {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+    padding: 0 20px 5px;
+    margin-bottom: 20px;
+}
+
+.dc-settings-group h3 {
+    margin: 0;
+    padding: 16px 0;
+    border-bottom: 1px solid #dcdcde;
+    font-size: 14px;
+}
+
+.dc-settings-group .form-table {
+    margin-top: 0;
+}

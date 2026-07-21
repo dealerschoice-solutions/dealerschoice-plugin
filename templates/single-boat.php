@@ -208,6 +208,15 @@ while (have_posts()) : the_post();
                                             <p class="boat-savings"><strong>Savings:</strong> $<?php echo esc_html(number_format($price - $msrp)); ?></p>
                                         <?php endif; ?>
                                     <?php endif; ?>
+
+                                    <!-- Estimated Payments from IMS, not finance calculator -->
+                                    <?php if($boat->hasEstimatedPayments()): ?>
+                                        <div class="payment">
+                                            <p><strong>Estimated Payment:</strong></p>
+                                            <p class="payment-amount"><strong>$<?=number_format($boat->getMonthlyPayment());?></strong> per month</p>
+                                            <p class="payment-details">Plus Tax. <?=$boat->getLoanTerm()?> months, <?=$boat->getInterestRate()?> APR, $<?=number_format($boat->getDownPayment())?> down payment.</p>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
 
                                 <!-- Key Specs -->

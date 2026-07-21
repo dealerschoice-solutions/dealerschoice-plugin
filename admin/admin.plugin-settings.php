@@ -29,6 +29,7 @@
  * - dealers_choice_finance_default_rate: Default APR (%) pre-filled in both finance calculators
  * - dealers_choice_finance_default_term: Default loan term (months) pre-filled in both finance calculators
  * - dealers_choice_finance_default_down_payment_percent: Default down payment (% of price) pre-filled in both finance calculators
+ * - dealers_choice_finance_calculator_disclaimer: Disclaimer text shown below both finance calculators
  * - dealers_choice_popup_form_id: Popup form ID for price inquiries
  * - dealerschoice_sales_cta_popup_id: Popup Maker popup ID for the inventory view tracker special offer
  * - dealerschoice_inventory_view_limit: Number of views before the special offer popup is triggered
@@ -174,6 +175,14 @@ function dealers_choice_process_settings_form() {
     }
     update_option('dealers_choice_finance_default_down_payment_percent', $finance_default_down_payment_percent);
 
+    // Finance Calculator: Save disclaimer text shown below both calculators
+    $finance_calculator_disclaimer = isset($_POST['dealers_choice_finance_calculator_disclaimer']) ? wp_kses_post($_POST['dealers_choice_finance_calculator_disclaimer']) : '';
+    if ($finance_calculator_disclaimer !== '') {
+        update_option('dealers_choice_finance_calculator_disclaimer', $finance_calculator_disclaimer);
+    } else {
+        delete_option('dealers_choice_finance_calculator_disclaimer');
+    }
+
     // Inventory View Tracker: Save Popup Maker popup ID and view limit
     $sales_cta_popup_id = isset($_POST['dealerschoice_sales_cta_popup_id']) ? sanitize_text_field($_POST['dealerschoice_sales_cta_popup_id']) : '';
     if ($sales_cta_popup_id !== '') {
@@ -311,6 +320,7 @@ function dealers_choice_settings_page() {
     $finance_default_term = get_option('dealers_choice_finance_default_term', 240);
     $finance_default_down_payment_percent = get_option('dealers_choice_finance_default_down_payment_percent', 20);
     $finance_term_options = \DC\Shortcodes::get_finance_term_options();
+    $finance_calculator_disclaimer = get_option('dealers_choice_finance_calculator_disclaimer', \DC\Shortcodes::get_default_finance_disclaimer());
     $default_sort = get_option('dealers_choice_default_sort', 'date-desc');
     $sort_options = [
         'date-desc'   => 'Newest First',
@@ -351,221 +361,264 @@ function dealers_choice_settings_page() {
             </table>
 
             <h2><?php _e('Display Settings', 'dealers-choice'); ?></h2>
-            <table class="form-table">
-                <tr>
-                    <th scope="row"><?php _e('Show Favorites', 'dealers-choice'); ?></th>
-                    <td>
-                        <label class="dc-switch">
-                            <input type="checkbox" id="dealers_choice_show_favorites" name="dealers_choice_show_favorites" value="1" <?php checked($show_favorites, '1'); ?> />
-                            <span class="dc-slider"></span>
-                        </label>
-                        <span class="dc-switch-label"><?php _e('Show favorites button on inventory items', 'dealers-choice'); ?></span>
-                        <p class="description"><?php _e('If checked, the favorites button will be displayed on inventory items.', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><?php _e('Show Finance Calculator', 'dealers-choice'); ?></th>
-                    <td>
-                        <label class="dc-switch">
-                            <input type="checkbox" id="dealers_choice_show_finance_calculator" name="dealers_choice_show_finance_calculator" value="1" <?php checked($show_finance_calculator, '1'); ?> />
-                            <span class="dc-slider"></span>
-                        </label>
-                        <span class="dc-switch-label"><?php _e('Show quick finance calculator on single boat pages', 'dealers-choice'); ?></span>
-                        <p class="description"><?php _e('Only displays when the boat has a visible price and does not already have dealer-supplied financing data from the inventory feed.', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-                <tr id="finance-default-rate-row">
-                    <th scope="row">
-                        <label for="dealers_choice_finance_default_rate"><?php _e('Default Interest Rate (APR %)', 'dealers-choice'); ?></label>
-                    </th>
-                    <td>
-                        <input type="number" step="0.01" min="0" max="30" id="dealers_choice_finance_default_rate" name="dealers_choice_finance_default_rate" value="<?php echo esc_attr($finance_default_rate); ?>" class="small-text" />
-                        <p class="description"><?php _e('Pre-fills the interest rate field on both finance calculators. Visitors can still type a custom rate. Default: 7.99.', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-                <tr id="finance-default-term-row">
-                    <th scope="row">
-                        <label for="dealers_choice_finance_default_term"><?php _e('Default Loan Term', 'dealers-choice'); ?></label>
-                    </th>
-                    <td>
-                        <select id="dealers_choice_finance_default_term" name="dealers_choice_finance_default_term">
-                            <?php foreach ($finance_term_options as $months => $label): ?>
-                                <option value="<?php echo esc_attr($months); ?>" <?php selected((int) $finance_default_term, $months); ?>><?php echo esc_html($label); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <p class="description"><?php _e('Pre-fills the loan term dropdown on both finance calculators. Default: 240 months (20 years).', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-                <tr id="finance-default-down-payment-row">
-                    <th scope="row">
-                        <label for="dealers_choice_finance_default_down_payment_percent"><?php _e('Default Down Payment (%)', 'dealers-choice'); ?></label>
-                    </th>
-                    <td>
-                        <input type="number" step="0.01" min="0" max="99" id="dealers_choice_finance_default_down_payment_percent" name="dealers_choice_finance_default_down_payment_percent" value="<?php echo esc_attr($finance_default_down_payment_percent); ?>" class="small-text" />
-                        <p class="description"><?php _e('Pre-fills the down payment field as a percentage of the amount financed on both finance calculators. Visitors can still enter a custom amount. Default: 20.', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="dealers_choice_default_sort"><?php _e('Default Sort Order', 'dealers-choice'); ?></label></th>
-                    <td>
-                        <select id="dealers_choice_default_sort" name="dealers_choice_default_sort">
-                            <?php foreach ($sort_options as $value => $label): ?>
-                                <option value="<?php echo esc_attr($value); ?>" <?php selected($default_sort, $value); ?>><?php echo esc_html($label); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <p class="description"><?php _e('Default sort order for the inventory listing.', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><?php _e('Always Show Price', 'dealers-choice'); ?></th>
-                    <td>
-                        <label class="dc-switch">
-                            <input type="checkbox" id="dealers_choice_always_show_price" name="dealers_choice_always_show_price" value="1" <?php checked($always_show_price, '1'); ?> />
-                            <span class="dc-slider"></span>
-                        </label>
-                        <span class="dc-switch-label"><?php _e('Show price on all inventory items', 'dealers-choice'); ?></span>
-                        <p class="description"><?php _e('If unchecked, a Reveal Price form can be shown instead of the price.', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-                <tr id="popup-form-id-row">
-                    <th scope="row">
-                        <label for="dealers_choice_popup_form_id">Reveal Price Popup Maker ID</label>
-                    </th>
-                    <td>
-                        <input type="text" id="dealers_choice_popup_form_id" name="dealers_choice_popup_form_id" value="<?php echo esc_attr($popup_form_id); ?>" class="regular-text" />
-                        <p class="description">Enter the ID of the Popup Maker popup that contains your reveal price form.</p>
-                    </td>
-                </tr>
-                <tr id="gravity-form-id-row">
-                    <th scope="row">
-                        <label for="dealers_choice_reveal_price_gravity_form_id">Reveal Price Gravity Form ID</label>
-                    </th>
-                    <td>
-                        <input type="text" name="dealers_choice_reveal_price_gravity_form_id" id="dealers_choice_reveal_price_gravity_form_id" value="<?php echo esc_attr( get_option('dealers_choice_reveal_price_gravity_form_id') ); ?>" class="regular-text">
-                        <p class="description">Enter the ID of the Gravity Form used in your "Reveal Price" popup.</p>
-                    </td>
-                </tr>
-                <tr id="allowed-zips-row">
-                    <th scope="row">
-                        <label for="dealers_choice_allowed_zips">Allowed Zip Codes</label>
-                    </th>
-                    <td>
-                        <textarea id="dealers_choice_allowed_zips" name="dealers_choice_allowed_zips" class="large-text" rows="5"><?php echo esc_textarea($allowed_zips); ?></textarea>
-                        <p class="description">A comma-separated list of zip codes that are allowed to see the price.</p>
-                    </td>
-                </tr>
-                <tr id="location-request-message-row">
-                    <th scope="row">
-                        <label for="dealers_choice_location_request_message">Location Request Message</label>
-                    </th>
-                    <td>
-                        <textarea name="dealers_choice_location_request_message" id="dealers_choice_location_request_message" class="large-text" rows="5"><?php echo esc_textarea( stripslashes( get_option( 'dealers_choice_location_request_message' ) ) ); ?></textarea>
-                        <p class="description">The message to display while verifying the user's location. Default: "In order to comply with manufacturer pricing policies, we need to verify your location. Please allow location access to continue."</p>
-                    </td>
-                </tr>
-                <tr id="location-verified-message-row">
-                    <th scope="row">
-                        <label for="dealers_choice_location_verified_message">Location Verified Message</label>
-                    </th>
-                    <td>
-                        <textarea name="dealers_choice_location_verified_message" id="dealers_choice_location_verified_message" class="large-text" rows="5"><?php echo esc_textarea( stripslashes( get_option( 'dealers_choice_location_verified_message' ) ) ); ?></textarea>
-                        <p class="description">The message to display when the user's location has been verified. Default: "Your location has been verified. Please fill out the form to reveal the price."</p>
-                    </td>
-                </tr>
-                <tr id="location-failed-message-row">
-                    <th scope="row">
-                        <label for="dealers_choice_location_failed_message">Location Failed Message</label>
-                    </th>
-                    <td>
-                        <textarea name="dealers_choice_location_failed_message" id="dealers_choice_location_failed_message" class="large-text" rows="5"><?php echo esc_textarea( stripslashes( get_option( 'dealers_choice_location_failed_message' ) ) ); ?></textarea>
-                        <p class="description">The message to display when the user is outside the allowed zip code area (out of sales territory). Default: "We're sorry, but we were unable to verify that you're currently in our boating territory. A salesperson will be in touch with you to discuss pricing. Please fill out the form to continue."</p>
-                    </td>
-                </tr>
-                <tr id="location-denied-message-row">
-                    <th scope="row">
-                        <label for="dealers_choice_location_denied_message">Location Denied / No Geolocation Message</label>
-                    </th>
-                    <td>
-                        <textarea name="dealers_choice_location_denied_message" id="dealers_choice_location_denied_message" class="large-text" rows="5"><?php echo esc_textarea( stripslashes( get_option( 'dealers_choice_location_denied_message', 'Geolocation is not supported by your browser. Please contact us for pricing information.' ) ) ); ?></textarea>
-                        <p class="description">The message to display when the user denies location access, or their browser does not support geolocation. Default: "Geolocation is not supported by your browser. Please contact us for pricing information."</p>
-                    </td>
-                </tr>
-                <tr id="sales-cta-popup-id-row">
-                    <th scope="row">
-                        <label for="dealerschoice_sales_cta_popup_id"><?php _e('Special Offer Popup Maker ID', 'dealers-choice'); ?></label>
-                    </th>
-                    <td>
-                        <input type="text" id="dealerschoice_sales_cta_popup_id" name="dealerschoice_sales_cta_popup_id" value="<?php echo esc_attr($sales_cta_popup_id); ?>" class="regular-text" />
-                        <p class="description"><?php _e('Enter the ID of the Popup Maker popup to show as a special offer once a visitor has viewed an inventory item enough times. Leave blank to disable the inventory view tracker.', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-                <tr id="inventory-view-limit-row">
-                    <th scope="row">
-                        <label for="dealerschoice_inventory_view_limit"><?php _e('Inventory View Limit', 'dealers-choice'); ?></label>
-                    </th>
-                    <td>
-                        <input type="number" min="1" id="dealerschoice_inventory_view_limit" name="dealerschoice_inventory_view_limit" value="<?php echo esc_attr($inventory_view_limit); ?>" class="small-text" />
-                        <p class="description"><?php _e('Number of times a visitor must view the same inventory item (tracked per-browser) before the special offer popup is triggered. Default: 5.', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-                <tr id="price-unavailable-message-row">
-                    <th scope="row">
-                        <label for="dealers_choice_price_unavailable_message">Price Unavailable Message</label>
-                    </th>
-                    <td>
-                        <textarea name="dealers_choice_price_unavailable_message" id="dealers_choice_price_unavailable_message" class="large-text" rows="3"><?php echo esc_textarea( stripslashes( get_option( 'dealers_choice_price_unavailable_message', 'Price unavailable. Please contact us.' ) ) ); ?></textarea>
-                        <p class="description">Shown in place of a $0 or missing price after the form is submitted. Default: "Price unavailable. Please contact us."</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="dealers_choice_get_a_quote_page_id"><?php _e('Get a Quote Page', 'dealers-choice'); ?></label></th>
-                    <td>
-                        <select id="dealers_choice_get_a_quote_page_id" name="dealers_choice_get_a_quote_page_id">
-                            <option value=""><?php _e('— Select a page —', 'dealers-choice'); ?></option>
-                            <?php foreach ($pages as $page): ?>
-                                <option value="<?php echo esc_attr($page->ID); ?>" <?php selected($cta_options['dealers_choice_get_a_quote_page_id'], $page->ID); ?>><?php echo esc_html($page->post_title); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <p class="description"><?php _e('Select the page for the Get a Quote form (optional).', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="dealers_choice_schedule_test_drive_page_id"><?php _e('Schedule a Test Drive Page', 'dealers-choice'); ?></label></th>
-                    <td>
-                        <select id="dealers_choice_schedule_test_drive_page_id" name="dealers_choice_schedule_test_drive_page_id">
-                            <option value=""><?php _e('— Select a page —', 'dealers-choice'); ?></option>
-                            <?php foreach ($pages as $page): ?>
-                                <option value="<?php echo esc_attr($page->ID); ?>" <?php selected($cta_options['dealers_choice_schedule_test_drive_page_id'], $page->ID); ?>><?php echo esc_html($page->post_title); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <p class="description"><?php _e('Select the page for the Schedule a Test Drive form (optional).', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="dealers_choice_financing_page_id"><?php _e('Financing Page', 'dealers-choice'); ?></label></th>
-                    <td>
-                        <select id="dealers_choice_financing_page_id" name="dealers_choice_financing_page_id">
-                            <option value=""><?php _e('— Select a page —', 'dealers-choice'); ?></option>
-                            <?php foreach ($pages as $page): ?>
-                                <option value="<?php echo esc_attr($page->ID); ?>" <?php selected($cta_options['dealers_choice_financing_page_id'], $page->ID); ?>><?php echo esc_html($page->post_title); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <p class="description"><?php _e('Select the page for the Financing form (optional).', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="dealers_choice_value_your_trade_page_id"><?php _e('Value Your Trade Page', 'dealers-choice'); ?></label></th>
-                    <td>
-                        <select id="dealers_choice_value_your_trade_page_id" name="dealers_choice_value_your_trade_page_id">
-                            <option value=""><?php _e('— Select a page —', 'dealers-choice'); ?></option>
-                            <?php foreach ($pages as $page): ?>
-                                <option value="<?php echo esc_attr($page->ID); ?>" <?php selected($cta_options['dealers_choice_value_your_trade_page_id'], $page->ID); ?>><?php echo esc_html($page->post_title); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <p class="description"><?php _e('Select the page for the Value Your Trade form (optional).', 'dealers-choice'); ?></p>
-                    </td>
-                </tr>
-            </table>
+
+            <div class="dc-settings-group">
+                <h3><?php _e('Favorites', 'dealers-choice'); ?></h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><?php _e('Show Favorites', 'dealers-choice'); ?></th>
+                        <td>
+                            <label class="dc-switch">
+                                <input type="checkbox" id="dealers_choice_show_favorites" name="dealers_choice_show_favorites" value="1" <?php checked($show_favorites, '1'); ?> />
+                                <span class="dc-slider"></span>
+                            </label>
+                            <span class="dc-switch-label"><?php _e('Show favorites button on inventory items', 'dealers-choice'); ?></span>
+                            <p class="description"><?php _e('If checked, the favorites button will be displayed on inventory items.', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="dc-settings-group">
+                <h3><?php _e('Finance Calculator', 'dealers-choice'); ?></h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><?php _e('Show Finance Calculator', 'dealers-choice'); ?></th>
+                        <td>
+                            <label class="dc-switch">
+                                <input type="checkbox" id="dealers_choice_show_finance_calculator" name="dealers_choice_show_finance_calculator" value="1" <?php checked($show_finance_calculator, '1'); ?> />
+                                <span class="dc-slider"></span>
+                            </label>
+                            <span class="dc-switch-label"><?php _e('Show quick finance calculator on single boat pages', 'dealers-choice'); ?></span>
+                            <p class="description"><?php _e('Only displays when the boat has a visible price and does not already have dealer-supplied financing data from the inventory feed.', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="finance-default-rate-row">
+                        <th scope="row">
+                            <label for="dealers_choice_finance_default_rate"><?php _e('Default Interest Rate (APR %)', 'dealers-choice'); ?></label>
+                        </th>
+                        <td>
+                            <input type="number" step="0.01" min="0" max="30" id="dealers_choice_finance_default_rate" name="dealers_choice_finance_default_rate" value="<?php echo esc_attr($finance_default_rate); ?>" class="small-text" />
+                            <p class="description"><?php _e('Pre-fills the interest rate field on both finance calculators. Visitors can still type a custom rate. Default: 7.99.', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="finance-default-term-row">
+                        <th scope="row">
+                            <label for="dealers_choice_finance_default_term"><?php _e('Default Loan Term', 'dealers-choice'); ?></label>
+                        </th>
+                        <td>
+                            <select id="dealers_choice_finance_default_term" name="dealers_choice_finance_default_term">
+                                <?php foreach ($finance_term_options as $months => $label): ?>
+                                    <option value="<?php echo esc_attr($months); ?>" <?php selected((int) $finance_default_term, $months); ?>><?php echo esc_html($label); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="description"><?php _e('Pre-fills the loan term dropdown on both finance calculators. Default: 240 months (20 years).', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="finance-default-down-payment-row">
+                        <th scope="row">
+                            <label for="dealers_choice_finance_default_down_payment_percent"><?php _e('Default Down Payment (%)', 'dealers-choice'); ?></label>
+                        </th>
+                        <td>
+                            <input type="number" step="0.01" min="0" max="99" id="dealers_choice_finance_default_down_payment_percent" name="dealers_choice_finance_default_down_payment_percent" value="<?php echo esc_attr($finance_default_down_payment_percent); ?>" class="small-text" />
+                            <p class="description"><?php _e('Pre-fills the down payment field as a percentage of the amount financed on both finance calculators. Visitors can still enter a custom amount. Default: 20.', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="finance-calculator-disclaimer-row">
+                        <th scope="row">
+                            <label for="dealers_choice_finance_calculator_disclaimer"><?php _e('Finance Calculator Disclaimer', 'dealers-choice'); ?></label>
+                        </th>
+                        <td>
+                            <textarea name="dealers_choice_finance_calculator_disclaimer" id="dealers_choice_finance_calculator_disclaimer" class="large-text" rows="4"><?php echo esc_textarea( stripslashes( $finance_calculator_disclaimer ) ); ?></textarea>
+                            <p class="description"><?php _e('Legal/informational disclaimer shown below both finance calculators. Since the calculators do not include a tax-rate field, the default text calls out that tax, title, and other fees are excluded from the estimate.', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="dc-settings-group">
+                <h3><?php _e('Sort Order', 'dealers-choice'); ?></h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><label for="dealers_choice_default_sort"><?php _e('Default Sort Order', 'dealers-choice'); ?></label></th>
+                        <td>
+                            <select id="dealers_choice_default_sort" name="dealers_choice_default_sort">
+                                <?php foreach ($sort_options as $value => $label): ?>
+                                    <option value="<?php echo esc_attr($value); ?>" <?php selected($default_sort, $value); ?>><?php echo esc_html($label); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="description"><?php _e('Default sort order for the inventory listing.', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="dc-settings-group">
+                <h3><?php _e('Pricing &amp; Reveal Price', 'dealers-choice'); ?></h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><?php _e('Always Show Price', 'dealers-choice'); ?></th>
+                        <td>
+                            <label class="dc-switch">
+                                <input type="checkbox" id="dealers_choice_always_show_price" name="dealers_choice_always_show_price" value="1" <?php checked($always_show_price, '1'); ?> />
+                                <span class="dc-slider"></span>
+                            </label>
+                            <span class="dc-switch-label"><?php _e('Show price on all inventory items', 'dealers-choice'); ?></span>
+                            <p class="description"><?php _e('If unchecked, a Reveal Price form can be shown instead of the price.', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="popup-form-id-row">
+                        <th scope="row">
+                            <label for="dealers_choice_popup_form_id">Reveal Price Popup Maker ID</label>
+                        </th>
+                        <td>
+                            <input type="text" id="dealers_choice_popup_form_id" name="dealers_choice_popup_form_id" value="<?php echo esc_attr($popup_form_id); ?>" class="regular-text" />
+                            <p class="description">Enter the ID of the Popup Maker popup that contains your reveal price form.</p>
+                        </td>
+                    </tr>
+                    <tr id="gravity-form-id-row">
+                        <th scope="row">
+                            <label for="dealers_choice_reveal_price_gravity_form_id">Reveal Price Gravity Form ID</label>
+                        </th>
+                        <td>
+                            <input type="text" name="dealers_choice_reveal_price_gravity_form_id" id="dealers_choice_reveal_price_gravity_form_id" value="<?php echo esc_attr( get_option('dealers_choice_reveal_price_gravity_form_id') ); ?>" class="regular-text">
+                            <p class="description">Enter the ID of the Gravity Form used in your "Reveal Price" popup.</p>
+                        </td>
+                    </tr>
+                    <tr id="allowed-zips-row">
+                        <th scope="row">
+                            <label for="dealers_choice_allowed_zips">Allowed Zip Codes</label>
+                        </th>
+                        <td>
+                            <textarea id="dealers_choice_allowed_zips" name="dealers_choice_allowed_zips" class="large-text" rows="5"><?php echo esc_textarea($allowed_zips); ?></textarea>
+                            <p class="description">A comma-separated list of zip codes that are allowed to see the price.</p>
+                        </td>
+                    </tr>
+                    <tr id="location-request-message-row">
+                        <th scope="row">
+                            <label for="dealers_choice_location_request_message">Location Request Message</label>
+                        </th>
+                        <td>
+                            <textarea name="dealers_choice_location_request_message" id="dealers_choice_location_request_message" class="large-text" rows="5"><?php echo esc_textarea( stripslashes( get_option( 'dealers_choice_location_request_message' ) ) ); ?></textarea>
+                            <p class="description">The message to display while verifying the user's location. Default: "In order to comply with manufacturer pricing policies, we need to verify your location. Please allow location access to continue."</p>
+                        </td>
+                    </tr>
+                    <tr id="location-verified-message-row">
+                        <th scope="row">
+                            <label for="dealers_choice_location_verified_message">Location Verified Message</label>
+                        </th>
+                        <td>
+                            <textarea name="dealers_choice_location_verified_message" id="dealers_choice_location_verified_message" class="large-text" rows="5"><?php echo esc_textarea( stripslashes( get_option( 'dealers_choice_location_verified_message' ) ) ); ?></textarea>
+                            <p class="description">The message to display when the user's location has been verified. Default: "Your location has been verified. Please fill out the form to reveal the price."</p>
+                        </td>
+                    </tr>
+                    <tr id="location-failed-message-row">
+                        <th scope="row">
+                            <label for="dealers_choice_location_failed_message">Location Failed Message</label>
+                        </th>
+                        <td>
+                            <textarea name="dealers_choice_location_failed_message" id="dealers_choice_location_failed_message" class="large-text" rows="5"><?php echo esc_textarea( stripslashes( get_option( 'dealers_choice_location_failed_message' ) ) ); ?></textarea>
+                            <p class="description">The message to display when the user is outside the allowed zip code area (out of sales territory). Default: "We're sorry, but we were unable to verify that you're currently in our boating territory. A salesperson will be in touch with you to discuss pricing. Please fill out the form to continue."</p>
+                        </td>
+                    </tr>
+                    <tr id="location-denied-message-row">
+                        <th scope="row">
+                            <label for="dealers_choice_location_denied_message">Location Denied / No Geolocation Message</label>
+                        </th>
+                        <td>
+                            <textarea name="dealers_choice_location_denied_message" id="dealers_choice_location_denied_message" class="large-text" rows="5"><?php echo esc_textarea( stripslashes( get_option( 'dealers_choice_location_denied_message', 'Geolocation is not supported by your browser. Please contact us for pricing information.' ) ) ); ?></textarea>
+                            <p class="description">The message to display when the user denies location access, or their browser does not support geolocation. Default: "Geolocation is not supported by your browser. Please contact us for pricing information."</p>
+                        </td>
+                    </tr>
+                    <tr id="price-unavailable-message-row">
+                        <th scope="row">
+                            <label for="dealers_choice_price_unavailable_message">Price Unavailable Message</label>
+                        </th>
+                        <td>
+                            <textarea name="dealers_choice_price_unavailable_message" id="dealers_choice_price_unavailable_message" class="large-text" rows="3"><?php echo esc_textarea( stripslashes( get_option( 'dealers_choice_price_unavailable_message', 'Price unavailable. Please contact us.' ) ) ); ?></textarea>
+                            <p class="description">Shown in place of a $0 or missing price after the form is submitted. Default: "Price unavailable. Please contact us."</p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="dc-settings-group">
+                <h3><?php _e('Sales CTA &amp; View Tracker', 'dealers-choice'); ?></h3>
+                <table class="form-table">
+                    <tr id="sales-cta-popup-id-row">
+                        <th scope="row">
+                            <label for="dealerschoice_sales_cta_popup_id"><?php _e('Special Offer Popup Maker ID', 'dealers-choice'); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" id="dealerschoice_sales_cta_popup_id" name="dealerschoice_sales_cta_popup_id" value="<?php echo esc_attr($sales_cta_popup_id); ?>" class="regular-text" />
+                            <p class="description"><?php _e('Enter the ID of the Popup Maker popup to show as a special offer once a visitor has viewed an inventory item enough times. Leave blank to disable the inventory view tracker.', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="inventory-view-limit-row">
+                        <th scope="row">
+                            <label for="dealerschoice_inventory_view_limit"><?php _e('Inventory View Limit', 'dealers-choice'); ?></label>
+                        </th>
+                        <td>
+                            <input type="number" min="1" id="dealerschoice_inventory_view_limit" name="dealerschoice_inventory_view_limit" value="<?php echo esc_attr($inventory_view_limit); ?>" class="small-text" />
+                            <p class="description"><?php _e('Number of times a visitor must view the same inventory item (tracked per-browser) before the special offer popup is triggered. Default: 5.', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="dc-settings-group">
+                <h3><?php _e('Call-to-Action Pages', 'dealers-choice'); ?></h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><label for="dealers_choice_get_a_quote_page_id"><?php _e('Get a Quote Page', 'dealers-choice'); ?></label></th>
+                        <td>
+                            <select id="dealers_choice_get_a_quote_page_id" name="dealers_choice_get_a_quote_page_id">
+                                <option value=""><?php _e('— Select a page —', 'dealers-choice'); ?></option>
+                                <?php foreach ($pages as $page): ?>
+                                    <option value="<?php echo esc_attr($page->ID); ?>" <?php selected($cta_options['dealers_choice_get_a_quote_page_id'], $page->ID); ?>><?php echo esc_html($page->post_title); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="description"><?php _e('Select the page for the Get a Quote form (optional).', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="dealers_choice_schedule_test_drive_page_id"><?php _e('Schedule a Test Drive Page', 'dealers-choice'); ?></label></th>
+                        <td>
+                            <select id="dealers_choice_schedule_test_drive_page_id" name="dealers_choice_schedule_test_drive_page_id">
+                                <option value=""><?php _e('— Select a page —', 'dealers-choice'); ?></option>
+                                <?php foreach ($pages as $page): ?>
+                                    <option value="<?php echo esc_attr($page->ID); ?>" <?php selected($cta_options['dealers_choice_schedule_test_drive_page_id'], $page->ID); ?>><?php echo esc_html($page->post_title); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="description"><?php _e('Select the page for the Schedule a Test Drive form (optional).', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="dealers_choice_financing_page_id"><?php _e('Financing Page', 'dealers-choice'); ?></label></th>
+                        <td>
+                            <select id="dealers_choice_financing_page_id" name="dealers_choice_financing_page_id">
+                                <option value=""><?php _e('— Select a page —', 'dealers-choice'); ?></option>
+                                <?php foreach ($pages as $page): ?>
+                                    <option value="<?php echo esc_attr($page->ID); ?>" <?php selected($cta_options['dealers_choice_financing_page_id'], $page->ID); ?>><?php echo esc_html($page->post_title); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="description"><?php _e('Select the page for the Financing form (optional).', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="dealers_choice_value_your_trade_page_id"><?php _e('Value Your Trade Page', 'dealers-choice'); ?></label></th>
+                        <td>
+                            <select id="dealers_choice_value_your_trade_page_id" name="dealers_choice_value_your_trade_page_id">
+                                <option value=""><?php _e('— Select a page —', 'dealers-choice'); ?></option>
+                                <?php foreach ($pages as $page): ?>
+                                    <option value="<?php echo esc_attr($page->ID); ?>" <?php selected($cta_options['dealers_choice_value_your_trade_page_id'], $page->ID); ?>><?php echo esc_html($page->post_title); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="description"><?php _e('Select the page for the Value Your Trade form (optional).', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
 
             <?php submit_button(__('Save Changes', 'dealers-choice')); ?>
         </form>

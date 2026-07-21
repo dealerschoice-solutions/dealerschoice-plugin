@@ -18,6 +18,7 @@
  * $down_payment_pct       (float) Default down payment (% of amount) from Settings.
  * $default_down_payment   (float|string) Pre-computed down payment, or '' if $default_amount is blank.
  * $term_options           (array) months => label loan term presets.
+ * $disclaimer             (string) Disclaimer text from Settings (may contain basic HTML - output with wp_kses_post()).
  * $instance_id            (string) Unique DOM id prefix for this instance.
  *
  * @package DealersChoice
@@ -36,6 +37,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /** @var float $down_payment_pct */
 /** @var float|string $default_down_payment */
 /** @var array $term_options */
+/** @var string $disclaimer */
 /** @var string $instance_id */
 ?>
 <div
@@ -150,10 +152,6 @@ if ( ! defined( 'ABSPATH' ) ) {
         <button type="submit" class="dc-button dc-finance-calc-submit">
             <?php esc_html_e( 'Calculate', 'dealerschoice' ); ?>
         </button>
-
-        <p class="dc-finance-calc-disclaimer">
-            <?php esc_html_e( 'This calculator provides an estimate for informational purposes only and is not an offer of credit. Contact us for your actual rate and payment terms.', 'dealerschoice' ); ?>
-        </p>
     </form>
 
     <div
@@ -163,6 +161,10 @@ if ( ! defined( 'ABSPATH' ) ) {
         aria-live="polite"
         aria-atomic="true"
     ></div>
+
+    <?php if ( $disclaimer ) : ?>
+        <p class="dc-finance-calc-disclaimer"><?php echo wp_kses_post( $disclaimer ); ?></p>
+    <?php endif; ?>
 
     <details class="dc-finance-schedule-details" hidden>
         <summary class="dc-finance-schedule-summary"><?php esc_html_e( 'View Full Amortization Schedule', 'dealerschoice' ); ?></summary>
