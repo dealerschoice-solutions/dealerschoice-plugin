@@ -47,7 +47,18 @@
  * - title: Quiz heading (default: 'Find Your Perfect Boat')
  * - subtitle: Sub-heading (default: descriptive tagline)
  * - submit_label: Label on the final submit button (default: 'Find My Perfect Boat')
- * 
+ *
+ * [dealerschoice_finance_calculator]
+ * Displays the generic client-side loan payment calculator, with a full
+ * monetization summary and an expandable amortization schedule.
+ * Attributes:
+ * - title: Heading above the form (default: 'Estimate Your Payment')
+ * - default_amount: Pre-filled amount financed (default: '', blank)
+ *
+ * The "quick" calculator shown automatically on single-boat.php is rendered
+ * via DC\Shortcodes::render_quick_finance_calculator() and is not a
+ * registered shortcode (it isn't user-insertable).
+ *
  * Dependencies:
  * - WordPress shortcode API
  * - DC\Template_Loader
@@ -72,6 +83,7 @@ class Shortcodes {
         add_shortcode('dealerschoice_favorites', [__CLASS__, 'favorites_shortcode']);
         add_shortcode('dealerschoice_location_list', [__CLASS__, 'location_list_shortcode']);
         add_shortcode('dealerschoice_boat_quiz', [__CLASS__, 'boat_quiz_shortcode']);
+        add_shortcode('dealerschoice_finance_calculator', [__CLASS__, 'finance_calculator_shortcode']);
     }
         /**
          * Favorites Shortcode
@@ -625,6 +637,155 @@ class Shortcodes {
             compact( 'title', 'subtitle', 'submit_label', 'questions', 'total_steps', 'nonce', 'gravity_form_id' )
         );
         return ob_get_clean();
+    }
+
+    /**
+     * Generic Finance Calculator Shortcode
+     *
+     * [dealerschoice_finance_calculator]
+     *
+     * Client-side loan payment calculator. Amount financed, rate, term, and
+     * down payment are all user-editable. Shows a quick loan summary plus a
+     * collapsed full amortization schedule.
+     *
+     * Attributes:
+     * - title           (string) Heading above the form. Default: 'Estimate Your Payment'
+     * - default_amount  (number) Pre-filled amount financed. Default: '' (blank, required field)
+     *
+     * @param array $atts Shortcode attributes.
+     * @return string HTML output.
+     */
+    public static function finance_calculator_shortcode( $atts ) {
+        $atts = shortcode_atts(
+            [
+                'title'          => __( 'Estimate Your Payment', 'dealerschoice' ),
+                'default_amount' => '',
+            ],
+            $atts,
+            'dealerschoice_finance_calculator'
+        );
+
+        wp_enqueue_style( 'dealerschoice-public' );
+        wp_enqueue_style( 'dealerschoice-finance-calculator' );
+        wp_enqueue_script( 'dealerschoice-finance-calculator' );
+
+        $title            = sanitize_text_field( $atts['title'] );
+        $default_amount   = is_numeric( $atts['default_amount'] ) ? (float) $atts['default_amount'] : '';
+        $default_rate     = self::get_default_finance_rate();
+        $default_term     = self::get_default_finance_term();
+        $down_payment_pct = self::get_default_finance_down_payment_percent();
+        $term_options     = self::get_finance_term_options();
+        $instance_id      = 'dc-finance-calc-' . wp_unique_id();
+
+        // Only pre-compute a down payment when we already know the amount;
+        // otherwise the JS fills it in once the visitor types an amount.
+        $default_down_payment = ( $default_amount !== '' )
+            ? round( $default_amount * $down_payment_pct / 100, 2 )
+            : '';
+
+        ob_start();
+        Template_Loader::get_template(
+            'shortcodes/finance-calculator.php',
+            compact( 'title', 'default_amount', 'default_rate', 'default_term', 'down_payment_pct', 'default_down_payment', 'term_options', 'instance_id' )
+        );
+        return ob_get_clean();
+    }
+
+    /**
+     * Renders the "quick" single-line finance calculator for a boat's price
+     * on single-boat.php. NOT registered as a shortcode - not user-insertable.
+     *
+     * Gating (all must pass):
+     * 1. Admin toggle 'dealers_choice_show_finance_calculator' is enabled.
+     * 2. The boat does not already have dealer-supplied financing data
+     *    (Boat::hasFinancingData() is false) - a dealer-stated payment is
+     *    authoritative and must not be contradicted by a generic estimate.
+     * 3. The boat's price is actually visible to the current visitor
+     *    (Boat::isPriceVisible() is true) - covers both the reveal-price
+     *    gate (manufacturer MAP/pricing policy compliance) and the
+     *    $0/empty "Contact Us for Our Price" case.
+     *
+     * @param \DC\Boat $boat
+     * @return string HTML output, or '' if gating fails.
+     */
+    public static function render_quick_finance_calculator( \DC\Boat $boat ) {
+        if ( get_option( 'dealers_choice_show_finance_calculator', '0' ) !== '1' ) {
+            return '';
+        }
+
+        if ( $boat->hasFinancingData() ) {
+            return '';
+        }
+
+        if ( ! $boat->isPriceVisible() ) {
+            return '';
+        }
+
+        $price = (float) $boat->getSaleprice();
+
+        wp_enqueue_style( 'dealerschoice-public' );
+        wp_enqueue_style( 'dealerschoice-finance-calculator' );
+        wp_enqueue_script( 'dealerschoice-finance-calculator' );
+
+        $default_rate          = self::get_default_finance_rate();
+        $default_term          = self::get_default_finance_term();
+        $down_payment_pct      = self::get_default_finance_down_payment_percent();
+        $term_options          = self::get_finance_term_options();
+        $instance_id           = 'dc-finance-calc-quick-' . $boat->getPostID();
+        $default_down_payment  = round( $price * $down_payment_pct / 100, 2 );
+
+        ob_start();
+        Template_Loader::get_template(
+            'shortcodes/finance-calculator-quick.php',
+            compact( 'price', 'default_rate', 'default_term', 'down_payment_pct', 'default_down_payment', 'term_options', 'instance_id' )
+        );
+        return ob_get_clean();
+    }
+
+    /**
+     * Global default APR (%) from Settings.
+     *
+     * @return float
+     */
+    public static function get_default_finance_rate() {
+        return (float) get_option( 'dealers_choice_finance_default_rate', 7.99 );
+    }
+
+    /**
+     * Global default loan term (months) from Settings.
+     *
+     * @return int
+     */
+    public static function get_default_finance_term() {
+        return (int) get_option( 'dealers_choice_finance_default_term', 240 );
+    }
+
+    /**
+     * Global default down payment, as a percentage of the amount financed,
+     * from Settings.
+     *
+     * @return float
+     */
+    public static function get_default_finance_down_payment_percent() {
+        return (float) get_option( 'dealers_choice_finance_default_down_payment_percent', 20 );
+    }
+
+    /**
+     * Common boat-loan term presets (months), shared by both calculator
+     * variants and the admin settings page's default-term dropdown - single
+     * source of truth so they never drift out of sync.
+     *
+     * @return array<int,string> value(months) => label
+     */
+    public static function get_finance_term_options() {
+        return [
+            60  => __( '60 months (5 years)', 'dealerschoice' ),
+            84  => __( '84 months (7 years)', 'dealerschoice' ),
+            120 => __( '120 months (10 years)', 'dealerschoice' ),
+            144 => __( '144 months (12 years)', 'dealerschoice' ),
+            180 => __( '180 months (15 years)', 'dealerschoice' ),
+            240 => __( '240 months (20 years)', 'dealerschoice' ),
+        ];
     }
 
 }

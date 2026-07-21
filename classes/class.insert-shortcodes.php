@@ -257,6 +257,23 @@ function dc_get_shortcode_schema() {
             ),
         ),
 
+        'dealerschoice_finance_calculator' => array(
+            'label'       => 'Finance Calculator',
+            'description' => 'Client-side loan payment calculator with amortization schedule.',
+            'fields'      => array(
+                'title' => array(
+                    'type'    => 'text',
+                    'label'   => 'Heading',
+                    'default' => 'Estimate Your Payment',
+                ),
+                'default_amount' => array(
+                    'type'    => 'number',
+                    'label'   => 'Pre-filled Amount Financed',
+                    'default' => '',
+                ),
+            ),
+        ),
+
     );
 }
 

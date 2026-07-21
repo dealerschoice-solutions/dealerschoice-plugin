@@ -193,6 +193,55 @@ class Boat {
         return !empty($this->getField('boat_video1')) || !empty($this->getField('boat_video2')) || !empty($this->getField('boat_video3')) || !empty($this->getField('boat_video4'));
     }
 
+    /**
+     * Numeric (float) monthly payment supplied by the dealer's inventory feed,
+     * or 0.0 if absent/non-numeric. The ACF field is type 'text' and may
+     * contain formatting characters, so strip everything but digits and the
+     * decimal point before casting (mirrors the sanitization already applied
+     * when this field is written in Inventory_Sync).
+     *
+     * @return float
+     */
+    public function getMonthlyPaymentNumeric() {
+        $raw = $this->getMonthlyPayment();
+        if ($raw === '' || $raw === null || $raw === false) {
+            return 0.0;
+        }
+        $numeric = preg_replace('/[^0-9.]/', '', (string) $raw);
+        return $numeric !== '' ? (float) $numeric : 0.0;
+    }
+
+    /**
+     * Whether the dealer feed has already supplied a real monthly payment
+     * for this boat. Used to suppress the quick finance calculator so it
+     * never contradicts a dealer-stated payment.
+     *
+     * @return bool
+     */
+    public function hasFinancingData() {
+        return $this->getMonthlyPaymentNumeric() > 0;
+    }
+
+    /**
+     * Whether the sale price is actually visible to the current visitor
+     * without any additional gated action (reveal-price form, etc). Mirrors
+     * the exact condition used by the price block in single-boat.php so both
+     * stay in sync. Also covers boats with a $0/empty price ("Contact Us for
+     * Our Price"), which have no valid number to calculate a payment from.
+     *
+     * @return bool
+     */
+    public function isPriceVisible() {
+        if ($this->getField('hide_sale_price')) {
+            return false;
+        }
+        if (get_option('dealers_choice_always_show_price', '0') !== '1') {
+            return false;
+        }
+        $price = $this->getSaleprice();
+        return !empty($price) && (float) $price > 0;
+    }
+
     public function getVideos(){
         $videos = [];
         if($this->getField('boat_video1')){$videos[] = $this->getField('boat_video1');}

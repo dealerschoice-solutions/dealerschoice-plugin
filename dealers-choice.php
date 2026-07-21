@@ -3,7 +3,7 @@
  * Plugin Name: DealersChoice Solutions
  * Plugin URI: https://www.dealerschoicesolutions.com
  * Description: A comprehensive dealership inventory management plugin that syncs boat listings from your DMS to WordPress with automatic categorization, image management, and advanced filtering.
- * Version: 1.0.5
+ * Version: 1.0.6
  * Author: DealersChoice, by Mannix Marketing
  * Author URI: https://www.dealerschoicesolutions.com
  * License: GPL2
@@ -212,7 +212,7 @@ function dealers_choice_acf_admin_notice() {
 // Define plugin constants
 define('DC_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('DC_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('DC_VERSION', '1.0.5');
+define('DC_VERSION', '1.0.6');
 
 // Plugin Update Checker — polls DealersChoice PUC Server for releases and triggers updates in WP Admin.
 require_once DC_PLUGIN_DIR . 'lib/plugin-update-checker/load-v5p7.php';
@@ -1686,6 +1686,41 @@ function dealers_choice_enqueue_public_assets() {
             'loading' => __('Finding your match', 'dealerschoice'),
             'submit'  => __('Find My Perfect Boat', 'dealerschoice'),
             'error'   => __('Something went wrong. Please try again.', 'dealerschoice'),
+        ]
+    );
+    wp_register_style(
+        'dealerschoice-finance-calculator',
+        DC_PLUGIN_URL . 'public/css/dealerschoice-finance-calculator.css',
+        ['dealerschoice-public'],
+        DC_VERSION
+    );
+    wp_register_script(
+        'dealerschoice-finance-calculator',
+        DC_PLUGIN_URL . 'public/js/dealerschoice-finance-calculator.js',
+        ['jquery'],
+        DC_VERSION,
+        true
+    );
+    wp_localize_script(
+        'dealerschoice-finance-calculator',
+        'dcFinanceCalcL10n',
+        [
+            'requiredField'      => __('This field is required.', 'dealerschoice'),
+            'invalidNumber'      => __('Please enter a valid number.', 'dealerschoice'),
+            'rateRange'          => __('Interest rate must be between 0 and 30.', 'dealerschoice'),
+            'termRange'          => __('Loan term must be between 1 and 600 months.', 'dealerschoice'),
+            'downPaymentTooHigh' => __('Down payment must be less than the amount financed.', 'dealerschoice'),
+            'resultHeadline'     => __('Estimated Monthly Payment:', 'dealerschoice'),
+            'quickResultLabel'   => __('Your estimated monthly payment:', 'dealerschoice'),
+            'amountFinancedLabel'=> __('Amount Financed:', 'dealerschoice'),
+            'totalInterestLabel' => __('Total Interest:', 'dealerschoice'),
+            'totalCostLabel'     => __('Total Cost of Loan:', 'dealerschoice'),
+            'scheduleCaption'    => __('Full amortization schedule', 'dealerschoice'),
+            'columnMonth'        => __('Month', 'dealerschoice'),
+            'columnPayment'      => __('Payment', 'dealerschoice'),
+            'columnPrincipal'    => __('Principal', 'dealerschoice'),
+            'columnInterest'     => __('Interest', 'dealerschoice'),
+            'columnBalance'      => __('Remaining Balance', 'dealerschoice'),
         ]
     );
 
