@@ -18,6 +18,7 @@
  *               Each option:   [ 'value', 'label', 'description', 'svg'|'dollars' ]
  * $nonce        (string) wp_create_nonce('dealerschoice_quiz_nonce')
  * $total_steps  (int)    Total number of question steps (for JS).
+ * $boat_count   (int)    Number of matching boats to show in the result slider.
  *
  * @package DealersChoice
  * @subpackage Templates
@@ -35,6 +36,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /** @var string $nonce */
 /** @var int    $total_steps */
 /** @var int    $gravity_form_id */
+/** @var int    $boat_count */
 ?>
 <div
     class="dc-quiz-wrap"
@@ -42,6 +44,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     data-nonce="<?php echo esc_attr( $nonce ); ?>"
     data-total-steps="<?php echo esc_attr( $total_steps ); ?>"
     data-gravity-form-id="<?php echo esc_attr( $gravity_form_id ); ?>"
+    data-boat-count="<?php echo esc_attr( $boat_count ); ?>"
 >
 
     <?php /* ── Quiz form ─────────────────────────────────────────── */ ?>

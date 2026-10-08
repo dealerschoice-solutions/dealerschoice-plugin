@@ -249,9 +249,12 @@ a.dc-button {
     border: none;
     cursor: pointer;
     padding: 5px 0;
+    border-radius: 0;
     &:hover,
     &:focus {
         text-decoration: underline;
+    }
+    &:focus-visible {
         outline: 1px dotted var(--secondary-color);
     }
 }
@@ -1680,6 +1683,13 @@ a.dc-button {
     text-transform: uppercase;
     color: var(--medium-gray, #666);
     margin: 0 0 1rem;
+}
+
+.dc-quiz-result-boats-note {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--medium-gray, #666);
+    margin: -0.5rem 0 1rem;
 }
 
 .dc-quiz-result-boats-section .dealerschoice-slider {

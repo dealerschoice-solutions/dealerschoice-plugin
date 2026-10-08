@@ -45,6 +45,20 @@
                 capacity: this.filterCapacities,
             };
 
+            // Locked taxonomy constraints declared by the shortcode's
+            // 'promotion' or 'lock' attribute. Held separately from
+            // this.filters because these must
+            // survive clearAllFilters(), pagination and sorting. Sent on every
+            // request and re-validated server-side; this is a convenience copy,
+            // not the source of truth.
+            this.locked = this.readLockedConstraints();
+
+            // Where to send a visitor who picks a different location from a
+            // header location selector while this page's location is locked.
+            // Emitted by the shortcode only when location is locked and this
+            // page is not itself the site-wide inventory page.
+            this.locationSwitchUrl = $('#inventory-wrapper').attr('data-location-switch-url') || '';
+
             this.sortBy = $('#inventory-sort').val() || 'date-desc';
             this.searchQuery = $('#q').val() || '';
             this.currentPage = 1;
@@ -77,6 +91,50 @@
             return $('input[name="' + name + '"]:checked')
                 .map(function() { return $(this).val(); })
                 .get();
+        }
+
+        /**
+         * Read locked taxonomy constraints from the wrapper's data-locked
+         * attribute, written server-side by the inventory shortcode.
+         *
+         * Returns {} on anything unexpected. That is intentionally the loose
+         * direction: the constraint is re-derived and enforced in PHP, so a
+         * malformed attribute here degrades to an unscoped request that the
+         * server still refuses to widen.
+         */
+        readLockedConstraints() {
+            const raw = $('#inventory-wrapper').attr('data-locked');
+
+            if (!raw) {
+                return {};
+            }
+
+            try {
+                const parsed = JSON.parse(raw);
+                return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+            } catch (e) {
+                return {};
+            }
+        }
+
+        /**
+         * Is this filter key locked by the shortcode?
+         *
+         * Anything locked is enforced server-side and cannot be widened from
+         * the client, so the UI must not offer or silently apply a competing
+         * value for the same key: it would simply AND to zero results.
+         */
+        isLocked(key) {
+            return Object.prototype.hasOwnProperty.call(this.locked, key)
+                && Array.isArray(this.locked[key])
+                && this.locked[key].length > 0;
+        }
+
+        /**
+         * Terms locked for a given key, or an empty array.
+         */
+        lockedTerms(key) {
+            return this.isLocked(key) ? this.locked[key] : [];
         }
 
         /**
@@ -265,12 +323,14 @@
         clearAllFilters() {
             // Uncheck all filter checkboxes
             $('#inventory-filters input[type="checkbox"]').prop('checked', false);
-            
-            // Reset filter state
+
+            // Reset filter state. this.locked is deliberately NOT reset: a page
+            // scoped by the shortcode's 'lock' attribute must stay scoped after
+            // the visitor clears their own filters.
             for (let key in this.filters) {
                 this.filters[key] = [];
             }
-            
+
             // Clear search
             $('#inventory-search').val('');
             this.searchQuery = '';
@@ -285,6 +345,20 @@
         fetchResults() {
             // Clone filters to avoid mutating original
             const filters = JSON.parse(JSON.stringify(this.filters));
+
+            // Drop any key already covered by a locked constraint. The sidebar
+            // still pre-checks (and hides) the widget for a constrained
+            // taxonomy, so without this the same term would be sent twice and
+            // WP_Query would build two identical tax_query clauses, adding a
+            // redundant JOIN to every request. Safe because a constrained
+            // taxonomy has no visible control, so there is no legitimate
+            // visitor selection to preserve.
+            const self = this;
+            Object.keys(this.locked).forEach(function(key) {
+                if (Object.prototype.hasOwnProperty.call(filters, key) && self.isLocked(key)) {
+                    delete filters[key];
+                }
+            });
             // If filters.id exists and is a non-empty array, ensure all values are strings/ints
             if (filters.id && Array.isArray(filters.id) && filters.id.length > 0) {
                 // Remove empty/invalid values
@@ -293,6 +367,7 @@
             const ajaxData = {
                 action: 'search_inventory',
                 filters: filters,
+                locked: this.locked,
                 sortBy: this.sortBy,
                 query: this.searchQuery,
                 currentPage: this.currentPage,
@@ -470,6 +545,15 @@
             let hasFilters = false;
 
             formInputs.forEach(function(input) {
+                // A URL parameter must never fight a locked constraint. The
+                // lock is enforced server-side, so applying a competing value
+                // for the same key would AND to zero results with no way back.
+                // URL parameters are a convenience for presetting filters on
+                // the site-wide inventory page; on a scoped page the scope wins.
+                if (inventorySearch.isLocked(input)) {
+                    return;
+                }
+
                 const param = getUrlParameters(input);
                 if (param.length > 0) {
                     hasFilters = true;
@@ -482,7 +566,7 @@
 
             // ?boat_year= → internal 'year' filter key (avoids WordPress reserved query var)
             const boatYearParam = getUrlParameters('boat_year');
-            if (boatYearParam.length > 0) {
+            if (boatYearParam.length > 0 && !inventorySearch.isLocked('year')) {
                 hasFilters = true;
                 boatYearParam.forEach(function(value) {
                     filters.year.push(value);
@@ -498,13 +582,21 @@
                 inventorySearch.fetchResults();
             }
         } else {
-            // Check LocalStorage for preferred location
-            const savedLocation = localStorage.getItem('dc_preferred_location');
-            if (savedLocation && savedLocation !== 'all') {
-                // Pre-check the box in the sidebar
-                $('#inventory-location-' + savedLocation).prop('checked', true);
-                // Update the search instance
-                inventorySearch.filters.location = [savedLocation];
+            // Check LocalStorage for preferred location.
+            //
+            // Skipped entirely when location is locked. This assignment (not
+            // append) is why a returning visitor whose saved location differs
+            // from a locked page's location would otherwise land on an empty
+            // listing having done nothing: the saved slug would AND against
+            // the locked term. On a location-scoped page the page wins.
+            if (!inventorySearch.isLocked('location')) {
+                const savedLocation = localStorage.getItem('dc_preferred_location');
+                if (savedLocation && savedLocation !== 'all') {
+                    // Pre-check the box in the sidebar
+                    $('#inventory-location-' + savedLocation).prop('checked', true);
+                    // Update the search instance
+                    inventorySearch.filters.location = [savedLocation];
+                }
             }
 
             // Fetch initial results
@@ -512,6 +604,38 @@
         }
 
         $(document).on('dc_location_changed', function(e, slug) {
+            // On a location-locked page the constraint is enforced server-side
+            // and the sidebar has no location widget, so filtering in place
+            // would strand the visitor on a permanent zero-results listing.
+            // Hand off to the site-wide inventory page with the chosen location
+            // preselected instead, which is what ?location= exists for.
+            if (inventorySearch.isLocked('location')) {
+                const lockedLocations = inventorySearch.lockedTerms('location');
+
+                // Already looking at the locked location: nothing to do.
+                if (slug !== 'all' && lockedLocations.indexOf(slug) !== -1) {
+                    return;
+                }
+
+                // No destination available (e.g. this IS the inventory page).
+                // Ignoring the change is not great, but it beats emptying the
+                // listing with no way to recover.
+                if (!inventorySearch.locationSwitchUrl) {
+                    return;
+                }
+
+                let target = inventorySearch.locationSwitchUrl;
+
+                if (slug !== 'all') {
+                    target += (target.indexOf('?') === -1 ? '?' : '&')
+                        + 'location=' + encodeURIComponent(slug);
+                }
+
+                window.location.href = target;
+
+                return;
+            }
+
             // Uncheck all location filters
             $('input[name="inventory-location"]').prop('checked', false);
             inventorySearch.filters.location = [];

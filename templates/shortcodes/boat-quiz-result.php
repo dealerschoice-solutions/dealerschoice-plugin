@@ -13,8 +13,11 @@
  * $top_term       (WP_Term)   The best-matching boat_type term.
  * $why_text       (string)    Explanation of why this type was recommended.
  * $inventory_url  (string)    Filtered inventory page URL.
- * $matching_boats (int[])     Post IDs of 1–3 matching boats.
+ * $matching_boats (int[])     Post IDs of matching boats (count set by the
+ *                             boat_quiz shortcode's boat_count attribute).
  * $alt_terms      (WP_Term[]) Up to 2 runner-up boat_type terms.
+ * $boat_meta      (array)     [ 'budget_respected' => bool, 'widened' => bool ]
+ *                             for the boats in $matching_boats.
  *
  * @package DealersChoice
  * @subpackage Templates
@@ -130,6 +133,22 @@ if ( $matching_count === 0 && $_budget_slug && $_budget_slug !== 'any' ) {
                 <p class="dc-quiz-result-boats-heading">
                     <?php esc_html_e( 'Boats You Might Like', 'dealerschoice' ); ?>
                 </p>
+                <?php
+                /*
+                 * When we couldn't fill the slider from the selected price
+                 * range, say so rather than presenting other-priced boats as
+                 * budget matches.
+                 */
+                if ( ! empty( $boat_meta ) && empty( $boat_meta['budget_respected'] )
+                    && ! empty( $_budget_slug ) && $_budget_slug !== 'any' ) : ?>
+                    <p class="dc-quiz-result-boats-note">
+                        <?php esc_html_e( 'We don\'t have this type in your selected price range right now, so here are the closest options we do have.', 'dealerschoice' ); ?>
+                    </p>
+                <?php elseif ( ! empty( $boat_meta['widened'] ) ) : ?>
+                    <p class="dc-quiz-result-boats-note">
+                        <?php esc_html_e( 'Includes a few options just outside your selected price range.', 'dealerschoice' ); ?>
+                    </p>
+                <?php endif; ?>
                 <div class="dealerschoice-shortcode dealerschoice-slider dc-mb">
                     <div class="boat-slider" id="<?php echo esc_attr( $slider_id ); ?>" data-slick='{"slidesToShow": 2}'>
                         <?php foreach ( $matching_boats as $boat_id ) :

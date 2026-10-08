@@ -391,18 +391,38 @@ class InventorySync {
         $gallery_ids = [];
         $images_synced_successfully = true;
         if ($process_images) {
-            // Process images and set featured image
+            // Resolve the API's image URLs to attachment IDs (order here reflects whatever
+            // arbitrary order the source system returns, not any manual curation).
             $images_result = $this->process_images($images_array);
-            $gallery_ids = $images_result['ids'];
+            $new_gallery_ids = array_map('intval', $images_result['ids']);
             $images_synced_successfully = $images_result['success'];
 
-            // Set first image as featured image if available
-            if (!empty($gallery_ids) && is_array($gallery_ids)) {
+            // Preserve manual ACF gallery reordering: keep the existing order for images that
+            // are still part of the unit, and append any newly-added images (in API order) at
+            // the end. This way a reorder only gets disturbed for the images that actually changed.
+            $existing_gallery_ids = array_map('intval', (array) get_field('gallery', $post_id, false));
+            if (!empty($existing_gallery_ids)) {
+                $preserved_order = array_values(array_intersect($existing_gallery_ids, $new_gallery_ids));
+                $added_images = array_values(array_diff($new_gallery_ids, $existing_gallery_ids));
+                $gallery_ids = array_merge($preserved_order, $added_images);
+            } else {
+                $gallery_ids = $new_gallery_ids;
+            }
+
+            // Keep the current featured image if it's still one of this unit's photos (even if
+            // its position moved); only fall back to the first gallery image if it was replaced
+            // with a genuinely new image not previously associated with this unit.
+            $current_thumbnail_id = (int) get_post_thumbnail_id($post_id);
+            if ($current_thumbnail_id && in_array($current_thumbnail_id, $gallery_ids, true)) {
+                $first_image_id = $current_thumbnail_id;
+            } elseif (!empty($gallery_ids)) {
                 $first_image_id = $gallery_ids[0];
-                // Check if the post already has this thumbnail
-                if (get_post_thumbnail_id($post_id) != $first_image_id) {
-                    set_post_thumbnail($post_id, $first_image_id);
-                }
+            } else {
+                $first_image_id = null;
+            }
+
+            if ($first_image_id && get_post_thumbnail_id($post_id) != $first_image_id) {
+                set_post_thumbnail($post_id, $first_image_id);
             }
         } else {
             // If not processing images, retain existing gallery

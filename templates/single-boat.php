@@ -210,7 +210,7 @@ while (have_posts()) : the_post();
                                     <?php endif; ?>
 
                                     <!-- Estimated Payments from IMS, not finance calculator -->
-                                    <?php if($boat->hasEstimatedPayments()): ?>
+                                    <?php if($boat->hasFinancingData()): ?>
                                         <div class="payment">
                                             <p><strong>Estimated Payment:</strong></p>
                                             <p class="payment-amount"><strong>$<?=number_format($boat->getMonthlyPayment());?></strong> per month</p>

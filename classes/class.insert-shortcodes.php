@@ -208,6 +208,16 @@ function dc_get_shortcode_schema() {
                     'label'   => 'Slides to Show',
                     'default' => 3,
                 ),
+                'autoplay' => array(
+                    'type'    => 'toggle',
+                    'label'   => 'Autoplay',
+                    'default' => false,
+                ),
+                'autoplay_speed' => array(
+                    'type'    => 'number',
+                    'label'   => 'Autoplay Speed (ms)',
+                    'default' => 3000,
+                ),
             ),
         ),
 
@@ -253,6 +263,11 @@ function dc_get_shortcode_schema() {
                     'label'   => 'Lead Capture Form',
                     'default' => '0',
                     'options' => $gf_forms_options,
+                ),
+                'boat_count' => array(
+                    'type'    => 'number',
+                    'label'   => 'Number of Matching Boats',
+                    'default' => 3,
                 ),
             ),
         ),

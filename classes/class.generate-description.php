@@ -107,15 +107,40 @@ function dc_generate_boat_description() {
     $prompt = "### ROLE ###\n Act as an expert marine copywriter and local SEO specialist. Your mission is to create a compelling boat description that ranks well on search engines for local buyers and persuades them to inquire.\n";
     $prompt .= "### TASK ###\n Generate a detailed and engaging 4-5 sentence description for a boat with the following attributes. The description must be persuasive, high-end, and optimized for local SEO.\n";
     $prompt .= "### BOAT ATTRIBUTES ###\n";
-    $prompt .= "Condition: " . ( get_field( 'type', $post_id ) ? get_field( 'type', $post_id ) : 'N/A' ) . "\n";
-    $prompt .= "Make: " . ( $make ? $make[0]->name : 'N/A' ) . "\n";
-    $prompt .= "Model: " . ( $model ? $model[0]->name : 'N/A' ) . "\n";
+    // get_the_terms() returns array|false|WP_Error. Resolve each to a plain
+    // string once, up front. The instruction lines below previously
+    // concatenated the raw arrays, which PHP renders as the literal string
+    // "Array" (a warning, not a fatal, so it shipped silently and degraded
+    // every generated description).
+    $make_name  = ( $make && ! is_wp_error( $make ) && isset( $make[0] ) ) ? $make[0]->name : '';
+    $model_name = ( $model && ! is_wp_error( $model ) && isset( $model[0] ) ) ? $model[0]->name : '';
+    $type_name  = ( $boat_type && ! is_wp_error( $boat_type ) && isset( $boat_type[0] ) ) ? $boat_type[0]->name : '';
+    $condition  = get_field( 'type', $post_id );
+
+    // Local SEO market, derived from the boat's own location term rather than
+    // hardcoded, so the prompt is correct for every dealer running the plugin.
+    // Falls back to omitting the geographic example entirely: a missing market
+    // costs the dealer far less than a wrong one.
+    $location_terms = get_the_terms( $post_id, 'location' );
+    $market         = ( $location_terms && ! is_wp_error( $location_terms ) && isset( $location_terms[0] ) )
+        ? $location_terms[0]->name
+        : '';
+
+    $local_examples = '"' . trim( $make_name . ' boats near me' ) . '"';
+
+    if ( $market !== '' ) {
+        $local_examples .= ' or "boat dealers in ' . $market . '"';
+    }
+
+    $prompt .= "Condition: " . ( $condition ? $condition : 'N/A' ) . "\n";
+    $prompt .= "Make: " . ( $make_name !== '' ? $make_name : 'N/A' ) . "\n";
+    $prompt .= "Model: " . ( $model_name !== '' ? $model_name : 'N/A' ) . "\n";
     $prompt .= "Year: " . ( $year ? $year : 'N/A' ) . "\n";
     $prompt .= "Length: " . ( $length ? $length : 'N/A' ) . "\n";
-    $prompt .= "Boat Type: " . ( $boat_type ? $boat_type[0]->name : 'N/A' ) . "\n";
+    $prompt .= "Boat Type: " . ( $type_name !== '' ? $type_name : 'N/A' ) . "\n";
     $prompt .= "### SEO & CONTENT INSTRUCTIONS ###\n";
-    $prompt .= "1.  **Primary Keywords:** Naturally integrate the primary keywords: \"".$year." ".$make." ".$model."\" and \"".get_field( 'type', $post_id )." ".$make." ".$model." for sale\".\n";
-    $prompt .= "2.  **Local SEO:** This is critical. You must naturally weave in the business name \"".get_bloginfo('name')."\" and selling points \"".get_bloginfo('description')."\". The goal is to capture local searches like \"".$make." boats near me\" or \"boat dealers in Lake George, New York\".\n";
+    $prompt .= "1.  **Primary Keywords:** Naturally integrate the primary keywords: \"".$year." ".$make_name." ".$model_name."\" and \"".$condition." ".$make_name." ".$model_name." for sale\".\n";
+    $prompt .= "2.  **Local SEO:** This is critical. You must naturally weave in the business name \"".get_bloginfo('name')."\" and selling points \"".get_bloginfo('description')."\". The goal is to capture local searches like ".$local_examples.".\n";
     $prompt .= "3.  **Benefits Over Features:** Do not just list the attributes. Translate them into compelling buyer benefits.\n";
     $prompt .= "4.  **Tone:** Use persuasive, energetic, and premium marketing language.\n";
     $prompt .= "5.  **Negative Keywords:** Do NOT use generic phrases like 'vessel' when referring to the boat, or 'setting sail'.\n";
