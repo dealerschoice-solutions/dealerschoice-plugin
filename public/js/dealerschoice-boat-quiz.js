@@ -51,6 +51,12 @@
 
     var $wrap, $form, $result, $progressFill;
 
+    // The submit button's server-rendered markup, captured before we ever
+    // swap in the loading state. The template honours the shortcode's
+    // submit_label attribute, which the localised strings know nothing about,
+    // so this is the only reliable way to put the button back.
+    var submitBtnHtml = '';
+
     // ── Init ─────────────────────────────────────────────────────────────────
 
     function init() {
@@ -64,6 +70,8 @@
         }
 
         state.totalSteps = parseInt( $wrap.data('total-steps'), 10 ) || 0;
+
+        submitBtnHtml = $wrap.find('#dc-quiz-submit-btn').html() || '';
 
         // Delegate events on the wrapper so they survive any DOM changes
         $wrap.on('change', 'input[type="radio"]', onOptionChange);
@@ -198,11 +206,115 @@
         updateProgress();
 
         // Smooth scroll to top of quiz
-        $('html, body').animate({ scrollTop: $wrap.offset().top - 40 }, 300);
+        scrollToElement( $wrap, 300 );
     }
 
     function getStep(stepNum) {
         return $wrap.find('.dc-quiz-step[data-step="' + stepNum + '"]');
+    }
+
+    // ── Scrolling ─────────────────────────────────────────────────────────────
+
+    // Minimum breathing room above the target when nothing else applies.
+    var SCROLL_GAP = 40;
+
+    /**
+     * Scroll an element into view, clearing any sticky/fixed site chrome.
+     *
+     * Themes vary wildly here, so rather than hardcoding an offset we work it
+     * out in priority order:
+     *
+     *   1. The element's own `scroll-margin-top`. This is the standard CSS
+     *      mechanism for exactly this problem, and a theme that sets it (e.g.
+     *      `[id] { scroll-margin-top: 200px; }`) has already told us its header
+     *      height. jQuery's animate() ignores the property, so we read it.
+     *   2. Failing that, measure whatever is actually pinned to the top of the
+     *      viewport right now — sticky headers, the WP admin bar, notice bars.
+     *   3. Failing that, a small default gap.
+     *
+     * @param {jQuery} $el      Target element.
+     * @param {number} duration Animation duration in ms.
+     */
+    function scrollToElement($el, duration) {
+        if ( ! $el || ! $el.length ) {
+            return;
+        }
+
+        var offset = scrollOffsetFor( $el[0] );
+        var top    = Math.max( 0, $el.offset().top - offset );
+
+        $('html, body').animate({ scrollTop: top }, duration);
+    }
+
+    function scrollOffsetFor(el) {
+        var cssMargin = 0;
+
+        if ( window.getComputedStyle ) {
+            // scrollMarginTop is unsupported in a few older engines; guard it.
+            var computed = window.getComputedStyle( el );
+            cssMargin = parseFloat( computed.scrollMarginTop || computed.scrollMargin ) || 0;
+        }
+
+        if ( cssMargin > 0 ) {
+            return cssMargin;
+        }
+
+        return measureStickyChrome() + SCROLL_GAP;
+    }
+
+    /**
+     * Height of anything currently pinned across the top of the viewport.
+     *
+     * Probes a few points along the top edge and keeps the lowest bottom edge
+     * belonging to a fixed/sticky element. Cheap, and needs no knowledge of
+     * the theme's markup.
+     *
+     * @return {number}
+     */
+    function measureStickyChrome() {
+        if ( typeof document.elementsFromPoint !== 'function' ) {
+            return 0;
+        }
+
+        var probeY  = 2;
+        var width   = window.innerWidth || document.documentElement.clientWidth;
+        var height  = window.innerHeight || document.documentElement.clientHeight;
+        var probesX = [ Math.round( width / 2 ), 24, Math.max( 0, width - 24 ) ];
+        var bottom  = 0;
+
+        probesX.forEach(function (x) {
+            var stack;
+            try {
+                stack = document.elementsFromPoint( x, probeY ) || [];
+            } catch (e) {
+                return;
+            }
+
+            Array.prototype.forEach.call(stack, function (node) {
+                if ( ! node || node === document.body || node === document.documentElement ) {
+                    return;
+                }
+
+                var position = window.getComputedStyle( node ).position;
+                if ( position !== 'fixed' && position !== 'sticky' ) {
+                    return;
+                }
+
+                var rect = node.getBoundingClientRect();
+
+                // Only count bars actually sitting at the top, and ignore
+                // full-screen overlays that merely happen to be fixed.
+                if ( rect.top > probeY || rect.height > height / 2 ) {
+                    return;
+                }
+
+                if ( rect.bottom > bottom ) {
+                    bottom = rect.bottom;
+                }
+            });
+        });
+
+        return bottom;
     }
 
     function stepIsAnswered(stepNum) {
@@ -245,7 +357,8 @@
             crew:            state.answers.crew       || '',
             priorities:      state.answers.priorities || '',
             budget:          state.answers.budget     || 'any',
-            gravity_form_id: parseInt( $wrap.data('gravity-form-id'), 10 ) || 0
+            gravity_form_id: parseInt( $wrap.data('gravity-form-id'), 10 ) || 0,
+            boat_count:      parseInt( $wrap.data('boat-count'), 10 ) || 3
         };
 
         $.ajax({
@@ -295,7 +408,7 @@
         });
 
         // Animate result into view
-        $('html, body').animate({ scrollTop: $result.offset().top - 40 }, 400);
+        scrollToElement( $result, 400 );
 
         // Inject quiz context into the embedded Gravity Form (if present)
         injectQuizDataIntoGF( $result );
@@ -308,8 +421,14 @@
     }
 
     function restoreSubmitLabel() {
+        // Prefer the markup the template actually rendered, so a custom
+        // submit_label and the template's own arrow icon both survive.
+        if ( submitBtnHtml ) {
+            return submitBtnHtml;
+        }
+
         return dcBoatQuizL10n.submit +
-            ' <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
+            ' <i class="fa-light fa-arrow-right-long" aria-hidden="true"></i>';
     }
 
     // ── Retake ────────────────────────────────────────────────────────────────
@@ -332,6 +451,11 @@
         $wrap.find('input[type="radio"]').prop('checked', false);
         $wrap.find('[data-action="next"], [data-action="submit"]').prop('disabled', true);
 
+        // Submit still carries the loading label from the run we just finished,
+        // since a successful submit hands off to the result screen without
+        // restoring it. Put it back or step 4 reads "Finding your match".
+        $wrap.find('#dc-quiz-submit-btn').html( restoreSubmitLabel() );
+
         // Clear any error messages
         $wrap.find('.dc-quiz-error').remove();
 
@@ -343,7 +467,7 @@
 
         updateProgress();
 
-        $('html, body').animate({ scrollTop: $wrap.offset().top - 40 }, 300);
+        scrollToElement( $wrap, 300 );
     }
 
     // ── Gravity Forms quiz-data injection ────────────────────────────────────

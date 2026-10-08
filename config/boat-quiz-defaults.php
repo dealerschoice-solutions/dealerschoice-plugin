@@ -20,11 +20,19 @@
  * automatically — no explicit 'scoring' entry needed. This keeps the quiz
  * site-agnostic for terms like "pontoon-boats", "offshore-fishing", etc.
  *
+ * Keywords match on WORD boundaries, and only the best keyword score is taken
+ * per question — never the sum. A term named "Wake Surf" therefore scores like
+ * a wake boat, not like a wake boat plus a surf boat. Keep each keyword block
+ * complete (activity + crew + priorities) so keyword-matched types stay
+ * competitive with types listed in the explicit matrix above.
+ *
  * Questions / answer keys:
  *   activity   : cruising | fishing | watersports | adventure
  *   crew       : small (1–4) | medium (5–8) | large (9+)
  *   priorities : comfort | performance | fishing | adventure
- *   budget     : pulled dynamically from price_range taxonomy (slug used as key)
+ *   budget     : pulled dynamically from price_range taxonomy (slug used as key).
+ *                Price is scored from live inventory (see 'price_fit'), so you
+ *                only need explicit 'budget' weights for unusual cases.
  *
  * @package DealersChoice
  * @since 1.0.0
@@ -158,24 +166,35 @@ return [
         ],
 
         'bass' => [
+            'match'      => 'exact',   // avoid matching unrelated compounds
             'activity'   => [ 'fishing' => 4 ],
             'crew'       => [ 'small' => 3 ],
             'priorities' => [ 'fishing' => 4 ],
         ],
 
         'wake' => [
-            'activity'   => [ 'watersports' => 4 ],
-            'priorities' => [ 'performance' => 4 ],
+            'activity'   => [ 'watersports' => 5, 'cruising' => 1 ],
+            'crew'       => [ 'small' => 2, 'medium' => 3, 'large' => 2 ],
+            'priorities' => [ 'performance' => 4, 'comfort' => 1 ],
         ],
 
         'ski' => [
-            'activity'   => [ 'watersports' => 3 ],
-            'priorities' => [ 'performance' => 3 ],
+            'match'      => 'exact',   // 'ski' would otherwise match "skiff"
+            'activity'   => [ 'watersports' => 5, 'cruising' => 1 ],
+            'crew'       => [ 'small' => 2, 'medium' => 3, 'large' => 2 ],
+            'priorities' => [ 'performance' => 4, 'comfort' => 1 ],
         ],
 
         'surf' => [
-            'activity'   => [ 'watersports' => 3 ],
-            'priorities' => [ 'performance' => 3 ],
+            'activity'   => [ 'watersports' => 5, 'cruising' => 1 ],
+            'crew'       => [ 'small' => 2, 'medium' => 3, 'large' => 2 ],
+            'priorities' => [ 'performance' => 4, 'comfort' => 1 ],
+        ],
+
+        'tow' => [
+            'activity'   => [ 'watersports' => 4 ],
+            'crew'       => [ 'small' => 2, 'medium' => 3, 'large' => 2 ],
+            'priorities' => [ 'performance' => 4 ],
         ],
 
         'cruiser' => [
@@ -189,11 +208,13 @@ return [
         ],
 
         'center' => [
+            'match'      => 'exact',   // avoid matching unrelated compounds
             'activity'   => [ 'fishing' => 3 ],
             'priorities' => [ 'fishing' => 3 ],
         ],
 
         'console' => [
+            'match'      => 'exact',   // avoid matching unrelated compounds
             'activity'   => [ 'fishing' => 2 ],
             'priorities' => [ 'fishing' => 2 ],
         ],
@@ -221,9 +242,9 @@ return [
         ],
 
         'runabout' => [
-            'activity'   => [ 'cruising' => 2, 'watersports' => 2 ],
-            'crew'       => [ 'small' => 3 ],
-            'priorities' => [ 'performance' => 3 ],
+            'activity'   => [ 'cruising' => 2, 'watersports' => 3 ],
+            'crew'       => [ 'small' => 3, 'medium' => 2 ],
+            'priorities' => [ 'performance' => 3, 'comfort' => 2 ],
         ],
 
         'skiff' => [
@@ -233,17 +254,20 @@ return [
         ],
 
         'jon' => [
+            'match'      => 'exact',   // avoid matching unrelated compounds
             'activity'   => [ 'fishing' => 3 ],
             'crew'       => [ 'small' => 4 ],
             'priorities' => [ 'fishing' => 4 ],
         ],
 
         'bay' => [
+            'match'      => 'exact',   // 'bay' would otherwise match "bayliner"
             'activity'   => [ 'fishing' => 3 ],
             'priorities' => [ 'fishing' => 3 ],
         ],
 
         'sport' => [
+            'match'      => 'exact',   // 'sport' would otherwise match "sportsman"
             'activity'   => [ 'watersports' => 2, 'cruising' => 2 ],
             'crew'       => [ 'small' => 2 ],
             'priorities' => [ 'performance' => 3 ],
@@ -260,6 +284,107 @@ return [
             'priorities' => [ 'adventure' => 3, 'comfort' => 2 ],
         ],
 
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Non-Boat Categories
+    |--------------------------------------------------------------------------
+    | Dealers commonly file accessories under the boat_type taxonomy so they
+    | appear in inventory listings — surfboards, foils, trailers, apparel. Those
+    | are legitimate inventory but they are never a valid answer to "which boat
+    | suits me", so any boat_type term matching one of these words is dropped
+    | from quiz scoring entirely (it is not shown as a match or as a runner-up).
+    |
+    | A term that also reads as a vessel is kept, so "Wakeboard Boats" survives
+    | while "Electric Wake Surfboards" does not.
+    |
+    | Set this to an empty array to consider every boat_type term, or filter
+    | per-term with the 'dc_boat_quiz_exclude_type' hook.
+    |--------------------------------------------------------------------------
+    */
+    'excluded_keywords' => [
+        // Deliberately conservative: only words that cannot describe a boat.
+        // "Wakeboard", "Wakesurf" and "Waterski" are NOT listed, because plenty
+        // of dealers use them as the name of a tow-boat category.
+        'surfboard',
+        'kneeboard',
+        'paddleboard',
+        'efoil',
+        'hydrofoil',
+        'foilboard',
+        'towable',
+        'tube',
+        'trailer',
+        'accessory',
+        'accessories',
+        'apparel',
+        'clothing',
+        'merchandise',
+        'part',
+        'parts',
+        'gear',
+        'electronics',
+        'lift',
+        'dock',
+        'cover',
+        'prop',
+        'propeller',
+        'motor',
+        'engine',
+        'lifejacket',
+        'rental',
+        'service',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vessel Keywords
+    |--------------------------------------------------------------------------
+    | Words that mark a term as an actual boat, overriding 'excluded_keywords'.
+    |--------------------------------------------------------------------------
+    */
+    'vessel_keywords' => [
+        'boat', 'boats', 'pontoon', 'pontoons', 'tritoon', 'tritoons',
+        'yacht', 'yachts', 'vessel', 'cruiser', 'cruisers', 'skiff',
+        'runabout', 'bowrider', 'catamaran', 'sailboat',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Price Fit
+    |--------------------------------------------------------------------------
+    | The quiz asks for a budget, so the budget has to change the answer. Rather
+    | than hard-coding what each boat type "should" cost — impossible to do
+    | site-agnostically, since price_range slugs differ per dealer — we count how
+    | many visible boats of each type actually sit inside the chosen price range
+    | and score on that. A type the dealer doesn't stock at that price is not a
+    | sensible recommendation for that price, whatever its name suggests.
+    |
+    |   hard_filter            When true, types with inventory in the budget
+    |                          always outrank types without. Set false to make
+    |                          price a weighted signal instead of a gate.
+    |   in_budget_bonus        Added when the type has any boats in budget.
+    |   out_of_budget_penalty  Subtracted when it has none.
+    |   depth_bonus_cap        Max extra points for depth of selection.
+    |   boats_per_depth_point  Boats in budget needed per depth point.
+    |   widen_tiers            How many price tiers either side the result
+    |                          slider may borrow from when the chosen range
+    |                          can't fill it. 0 disables widening. Keep this
+    |                          low — travelling the whole ladder is what let a
+    |                          "$200k+" answer come back with $18k stock.
+    |
+    | If NO boat type has inventory in the chosen range, price scoring is skipped
+    | entirely so a thin inventory can't produce a nonsense result.
+    |--------------------------------------------------------------------------
+    */
+    'price_fit' => [
+        'hard_filter'           => true,
+        'in_budget_bonus'       => 4,
+        'out_of_budget_penalty' => 6,
+        'depth_bonus_cap'       => 2,
+        'boats_per_depth_point' => 3,
+        'widen_tiers'           => 1,
     ],
 
     /*

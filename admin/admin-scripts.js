@@ -85,7 +85,7 @@
         // Show/hide Popup Form ID row based on Always Show Price toggle
         if($('#dealers_choice_always_show_price').length) {
             var $priceToggle = $('#dealers_choice_always_show_price');
-            var $revealPriceRows = $('#popup-form-id-row, #gravity-form-id-row, #allowed-zips-row, #location-request-message-row, #location-verified-message-row, #location-failed-message-row, #location-denied-message-row, #price-unavailable-message-row');
+            var $revealPriceRows = $('#reveal-price-scope-row, #popup-form-id-row, #gravity-form-id-row, #allowed-zips-row, #location-request-message-row, #location-verified-message-row, #location-failed-message-row, #location-denied-message-row, #price-unavailable-message-row');
 
             function toggleRevealPriceFields() {
                 if ($priceToggle.is(':checked')) {

@@ -24,6 +24,7 @@
  * - dealers_choice_financing_page_id: Page ID for Financing form
  * - dealers_choice_value_your_trade_page_id: Page ID for Value Your Trade form
  * - dealers_choice_always_show_price: Toggle to always show price
+ * - dealers_choice_reveal_price_scope: Whether revealing a price unlocks all prices on the page ('all') or only the clicked unit ('individual')
  * - dealers_choice_show_favorites: Toggle to show favorites
  * - dealers_choice_show_finance_calculator: Toggle to show the quick finance calculator on single boat pages
  * - dealers_choice_finance_default_rate: Default APR (%) pre-filled in both finance calculators
@@ -88,7 +89,14 @@ function dealers_choice_process_settings_form() {
     // Display Settings: Save 'Always Show Price' and Popup Form ID
     $always_show_price = isset($_POST['dealers_choice_always_show_price']) ? '1' : '0';
     update_option('dealers_choice_always_show_price', $always_show_price);
-    
+
+    // Display Settings: Save whether a reveal unlocks every price or only the clicked unit
+    $reveal_price_scope = isset($_POST['dealers_choice_reveal_price_scope']) ? sanitize_text_field($_POST['dealers_choice_reveal_price_scope']) : 'all';
+    if (!in_array($reveal_price_scope, array('all', 'individual'), true)) {
+        $reveal_price_scope = 'all';
+    }
+    update_option('dealers_choice_reveal_price_scope', $reveal_price_scope);
+
     $popup_form_id = isset($_POST['dealers_choice_popup_form_id']) ? sanitize_text_field($_POST['dealers_choice_popup_form_id']) : '';
     if ($popup_form_id !== '') {
         update_option('dealers_choice_popup_form_id', $popup_form_id);
@@ -314,6 +322,7 @@ function dealers_choice_settings_page() {
 
     // Display Settings: Get current values
     $always_show_price = get_option('dealers_choice_always_show_price', '1');
+    $reveal_price_scope = get_option('dealers_choice_reveal_price_scope', 'all');
     $show_favorites = get_option('dealers_choice_show_favorites', '1');
     $show_finance_calculator = get_option('dealers_choice_show_finance_calculator', '0');
     $finance_default_rate = get_option('dealers_choice_finance_default_rate', 7.99);
@@ -465,6 +474,18 @@ function dealers_choice_settings_page() {
                             </label>
                             <span class="dc-switch-label"><?php _e('Show price on all inventory items', 'dealers-choice'); ?></span>
                             <p class="description"><?php _e('If unchecked, a Reveal Price form can be shown instead of the price.', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="reveal-price-scope-row">
+                        <th scope="row">
+                            <label for="dealers_choice_reveal_price_scope"><?php _e('Reveal Price Scope', 'dealers-choice'); ?></label>
+                        </th>
+                        <td>
+                            <select id="dealers_choice_reveal_price_scope" name="dealers_choice_reveal_price_scope">
+                                <option value="all" <?php selected($reveal_price_scope, 'all'); ?>><?php _e('Reveal all prices on the page', 'dealers-choice'); ?></option>
+                                <option value="individual" <?php selected($reveal_price_scope, 'individual'); ?>><?php _e('Reveal only the unit that was clicked', 'dealers-choice'); ?></option>
+                            </select>
+                            <p class="description"><?php _e('With <strong>all prices</strong>, one form submission unlocks every price on the page and prices are revealed automatically on later visits. With <strong>only the clicked unit</strong>, the form is shown once; after that each unit reveals its own price when clicked, and prices are never revealed automatically on page load.', 'dealers-choice'); ?></p>
                         </td>
                     </tr>
                     <tr id="popup-form-id-row">

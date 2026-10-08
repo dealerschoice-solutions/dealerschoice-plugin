@@ -281,6 +281,17 @@ This plugin is distributed in the hope that it will be useful, but WITHOUT ANY W
 While the plugin software is GPL-licensed, access to our premium services, API endpoints, updates, and support requires a separate paid subscription governed by our [Terms of Service](https://www.dealerschoicesolutions.com/terms-of-use/).
 
 ## Changelog
+### 1.0.8
+- Minor plugin settings and display updates
+- Fix: Reveal Price system now tracks displayed price in form submission
+- Enhancement: Added special 'Promotions' taxonomy to allow custom flags like Featured, Quick Sales, etc.
+- Enhancement: Admin listing table now allows for Stock and HIN search as well as Location filters
+- Fix: When the shortcode sets a filter, clicking 'clear all filters' would clear even the set filters. Shortcode now locks those filters.
+- Enhancement: Boat quiz results now include an optional number of boats to show in the slider
+- Fix: Image import now checks order of images from the API and ensures gallery order matches
+- Enhancement: Inventory Sliders now allow autoplay via shortcode attribute
+- Enhancement: Added settings for Reveal Price system to unlock all prices or only the unit in which the button was clicked
+
 ### 1.0.7
 - Minor plugin settings and display updates
 
@@ -326,6 +337,6 @@ While the plugin software is GPL-licensed, access to our premium services, API e
 
 ## Credits
 
-**Author**: DealersChoice, by Mannix Marketing  
-**Plugin URI**: [https://www.dealerschoicesolutions.com](https://www.dealerschoicesolutions.com)  
+**Author**: DealersChoice, by Mannix Marketing
+**Plugin URI**: [https://www.dealerschoicesolutions.com](https://www.dealerschoicesolutions.com)
 **Version**: 1.0.0

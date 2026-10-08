@@ -18,10 +18,39 @@
  * - show_filters: Show filter sidebar (default: true)
  * - show_search: Show search box (default: true)
  * - show_sort: Show sort dropdown (default: true)
- * - category: Filter by category slug
- * - condition: Filter by condition slug
- * - location: Filter by location slug
- * 
+ * - category: Constrain to one or more boat_type slugs, comma separated
+ * - condition: Constrain to one or more condition slugs, comma separated
+ * - status: Constrain to one or more boat_status slugs, comma separated
+ * - location: Constrain to one or more location slugs, comma separated
+ * - make: Constrain to one or more make slugs, comma separated
+ * - promotion: Constrain to one or more dc_promotions slugs, comma separated:
+ *           promotion="clearance"
+ *           promotion="featured,clearance"
+ *         Term slugs are whatever the dealer created under Inventory >
+ *         Promotions; the plugin ships no vocabulary of its own. Unlike the
+ *         attributes above, promotions never render as a filter widget.
+ * - lock: Constrain a taxonomy that has no dedicated attribute above, as
+ *         "key:slug" pairs separated by "|" (slugs within a key separated
+ *         by ","):
+ *           lock="price:50000-100000"
+ *           lock="year:2026|length:20-24"
+ *         Keys come from AJAX_Handlers::get_lockable_taxonomy_map(). Setting a
+ *         key that also has its own attribute is allowed and merges with it.
+ * - lock_notice: Show the "Showing: ..." text for the active constraints
+ *         (default: false). Set lock_notice="true" on the rare page where the
+ *         constraint isn't already obvious from the page title or heading, so
+ *         visitors aren't left wondering why the list is short.
+ *
+ * ALL of the constraint attributes above are enforced server-side on every
+ * AJAX request, so they survive "Clear All Filters", pagination, sorting, the
+ * header location selector, URL parameters and show_filters="false". Any
+ * constrained taxonomy has its sidebar widget hidden, since there is nothing
+ * left for the visitor to change.
+ *
+ * For a filter the visitor SHOULD be able to change, do not set an attribute.
+ * Link to the page with a URL parameter instead (?condition=new), which
+ * pre-checks the filter while leaving the widget visible and adjustable.
+ *
  * [dealerschoice_slider]
  * Displays a horizontal slider/carousel of boats
  * Attributes:
@@ -29,9 +58,17 @@
  * - category: Filter by category slug
  * - condition: Filter by condition slug
  * - location: Filter by location slug
- * - orderby: Sort by (date, price, year, length) (default: date)
+ * - promotion: Scope the slider to one or more dc_promotions term slugs,
+ *        comma separated, e.g. promotion="featured"
+ * - tax: Additional taxonomy constraint, same "key:slug" syntax as 'lock'
+ *        above, e.g. tax="condition:new"
+ * - orderby: Sort by (date, price, year, length, rand) (default: date)
  * - order: Sort direction (ASC, DESC) (default: DESC)
- * 
+ * - slides_to_show: Number of slides visible at once (default: 3)
+ * - autoplay: Automatically advance slides (default: false)
+ * - autoplay_speed: Milliseconds between auto-advances, only used when
+ *        autoplay is enabled (default: 3000)
+ *
  * [dealerschoice_filters]
  * Displays just the filter sidebar (useful for custom layouts)
  * 
@@ -85,6 +122,24 @@ class Shortcodes {
         add_shortcode('dealerschoice_boat_quiz', [__CLASS__, 'boat_quiz_shortcode']);
         add_shortcode('dealerschoice_finance_calculator', [__CLASS__, 'finance_calculator_shortcode']);
     }
+
+    /**
+     * Enqueue the Reveal Price script for any shortcode that renders inventory cards.
+     *
+     * Only needed when prices are gated. Enqueuing from the shortcode (rather than from
+     * wp_enqueue_scripts) means the script follows the markup, so inventory rendered from
+     * a block, widget, or page-builder template gets a working handler too. The script is
+     * registered with $in_footer = true, so a shortcode-time enqueue during the_content
+     * still prints, and wp_localize_script still applies.
+     */
+    public static function enqueue_reveal_price_assets() {
+        if (get_option('dealers_choice_always_show_price', '0') === '1') {
+            return;
+        }
+        wp_enqueue_script('dealerschoice-reveal-price');
+        wp_localize_script('dealerschoice-reveal-price', 'revealPriceSettings', dealers_choice_reveal_price_settings());
+    }
+
         /**
          * Favorites Shortcode
          *
@@ -97,6 +152,9 @@ class Shortcodes {
             wp_enqueue_style('dealerschoice-public');
             wp_enqueue_script('dealerschoice-favorites');
             wp_enqueue_script('dealerschoice-public');
+            // Favorites renders the same inventory-block.php cards, so it needs the
+            // Reveal Price handler too or its "Reveal Price" buttons do nothing.
+            self::enqueue_reveal_price_assets();
 
             ob_start();
             ?>
@@ -135,6 +193,8 @@ class Shortcodes {
                                 if (window.DealersChoiceFavorites && typeof window.DealersChoiceFavorites.initFavoriteButtons === 'function') {
                                     window.DealersChoiceFavorites.initFavoriteButtons('#dealerschoice-favorites-list');
                                 }
+                                // Let reveal-price restore already-unlocked prices in the new cards.
+                                $(document).trigger('dc:inventoryRendered');
                             } else {
                                 $list.html('<p>No favorites found.</p>');
                             }
@@ -169,6 +229,9 @@ class Shortcodes {
             'status' => '',
             'location' => '',
             'make' => '',
+            'promotion' => '',
+            'lock' => '',
+            'lock_notice' => false,
         ], $atts, 'dealerschoice_inventory');
 
         // Support 'categories' attribute as alias for 'category'
@@ -183,6 +246,7 @@ class Shortcodes {
         wp_enqueue_style('dealerschoice-public');
         wp_enqueue_script('dealerschoice-public');
         wp_enqueue_script('dealerschoice-favorites');
+        self::enqueue_reveal_price_assets();
 
         // Ensure that location, condition, category, and make are arrays;
         // single values and comma-separated strings are converted to arrays
@@ -202,21 +266,93 @@ class Shortcodes {
             $atts['make'] = array_filter(array_map('trim', explode(',', $atts['make'])));
         }
 
-        // Build initial filters from attributes
-        // Pass slugs directly to Inventory class
-        $filters = [
-            'location' => $atts['location'] ? $atts['location'] : false,
-            'condition' => $atts['condition'] ? $atts['condition'] : false,
-            'boat_status' => $atts['status'] ? $atts['status'] : false,
-            'year' => false,
-            'boat_type' => $atts['category'] ? $atts['category'] : false,
-            'model' => false,
-            'make' => $atts['make'] ? $atts['make'] : false,
-            'price_range' => false,
-            'length_range' => false,
-            'horsepower_range' => false,
-            'person_capacity' => false,
+        // Every filter attribute on this shortcode is a hard constraint, not a
+        // changeable default. An author writing category="bowrider" means "this
+        // page shows bowriders", which is also why templates/filters.php hides
+        // the corresponding widget: nobody hides the control for a value the
+        // visitor is meant to change.
+        //
+        // Historically these attributes only pre-checked sidebar checkboxes,
+        // leaving the constraint in client-side state where "Clear All Filters",
+        // the header location selector and URL parameters could each escape it.
+        // That was a consequence of the results being fully AJAX-driven rather
+        // than a design decision, and it also disagreed with
+        // slider_shortcode(), which has always built its tax_query server-side
+        // from the same attribute names.
+        //
+        // For a filter the visitor SHOULD be able to change, link to the page
+        // with a URL parameter (?condition=new) instead of setting an attribute.
+        $locked_raw = [
+            'category'  => $atts['category'],
+            'condition' => $atts['condition'],
+            'status'    => $atts['status'],
+            'location'  => $atts['location'],
+            'make'      => $atts['make'],
         ];
+
+        if (trim((string) $atts['promotion']) !== '') {
+            $locked_raw['promotion'] = array_filter(
+                array_map('trim', explode(',', $atts['promotion'])),
+                'strlen'
+            );
+        }
+
+        // Validates keys against the lockable map, drops unknown ones and
+        // forces every slug through sanitize_title().
+        $locked = AJAX_Handlers::sanitize_locked_constraints($locked_raw);
+
+        // lock="" remains supported for the taxonomies with no dedicated
+        // attribute (price, length, capacity, horsepower, year, model) and
+        // merges with any attribute constraint on the same taxonomy rather than
+        // overwriting it, so the two can be combined without one silently
+        // discarding the other.
+        foreach (self::parse_lock_attribute($atts['lock']) as $lock_key => $lock_terms) {
+            $locked[$lock_key] = isset($locked[$lock_key])
+                ? array_values(array_unique(array_merge($locked[$lock_key], $lock_terms)))
+                : $lock_terms;
+        }
+
+        // $filters drives templates/filters.php: which widgets render and
+        // which are hidden as already-applied. Starts empty and is populated
+        // from $locked below, so the attributes and the sidebar can't drift.
+        //
+        // $count_filters additionally carries every locked constraint, so the
+        // term counts beside each checkbox reflect the true scope of the page.
+        // Without this a promotion-scoped listing would advertise "Pontoon
+        // (47)" and then return three boats when clicked.
+        //
+        // These are separate on purpose. Locked constraints must narrow the
+        // counts, but only constraints that correspond to a real sidebar
+        // widget may enter $filters. dc_promotions has no widget and must
+        // never appear in the filter sidebar, which is why it is absent from
+        // get_filter_taxonomy_map() and present only in the lockable map.
+        $filters = [
+            'location'         => false,
+            'condition'        => false,
+            'boat_status'      => false,
+            'year'             => false,
+            'boat_type'        => false,
+            'model'            => false,
+            'make'             => false,
+            'price_range'      => false,
+            'length_range'     => false,
+            'horsepower_range' => false,
+            'person_capacity'  => false,
+        ];
+
+        $filter_map    = AJAX_Handlers::get_filter_taxonomy_map();
+        $lockable_map  = AJAX_Handlers::get_lockable_taxonomy_map();
+        $count_filters = $filters;
+
+        foreach ($locked as $lock_key => $lock_terms) {
+            // Inventory::getTaxonomyValuesFor*() treats the array key as the
+            // taxonomy name, so the count array is keyed by taxonomy.
+            $count_filters[$lockable_map[$lock_key]] = $lock_terms;
+
+            if (isset($filter_map[$lock_key])) {
+                $filters[self::map_lock_key_to_filters_key($lock_key)] = $lock_terms;
+            }
+        }
 
         // Check for 'notfound' parameter
         $not_found_message = '';
@@ -226,28 +362,71 @@ class Shortcodes {
             </div>';
         }
 
-        // Get filter data
+        // Get filter data. Counts use $count_filters so they respect locked
+        // constraints; the widgets themselves are driven by $filters below.
         if (class_exists('\DC\Inventory')) {
-            $locations = \DC\Inventory::getTaxonomyValuesForLocation($filters);
-            $conditions = \DC\Inventory::getTaxonomyValuesForCondition($filters);
-            $statuses = \DC\Inventory::getTaxonomyValuesForStatus($filters);
-            $years = \DC\Inventory::getTaxonomyValuesForYear($filters);
-            $categories = \DC\Inventory::getTaxonomyValuesForBoatType($filters);
-            $makes = \DC\Inventory::getTaxonomyValuesForMake($filters);
-            $models = \DC\Inventory::getTaxonomyValuesForModel($filters);
-            $priceRanges = \DC\Inventory::getTaxonomyValuesForPriceRange($filters);
-            $lengths = \DC\Inventory::getTaxonomyValuesForLength($filters);
-            $horsepowers = \DC\Inventory::getTaxonomyValuesForHorsepower($filters);
-            $capacities = \DC\Inventory::getTaxonomyValuesForPersonCapacity($filters);
+            $locations = \DC\Inventory::getTaxonomyValuesForLocation($count_filters);
+            $conditions = \DC\Inventory::getTaxonomyValuesForCondition($count_filters);
+            $statuses = \DC\Inventory::getTaxonomyValuesForStatus($count_filters);
+            $years = \DC\Inventory::getTaxonomyValuesForYear($count_filters);
+            $categories = \DC\Inventory::getTaxonomyValuesForBoatType($count_filters);
+            $makes = \DC\Inventory::getTaxonomyValuesForMake($count_filters);
+            $models = \DC\Inventory::getTaxonomyValuesForModel($count_filters);
+            $priceRanges = \DC\Inventory::getTaxonomyValuesForPriceRange($count_filters);
+            $lengths = \DC\Inventory::getTaxonomyValuesForLength($count_filters);
+            $horsepowers = \DC\Inventory::getTaxonomyValuesForHorsepower($count_filters);
+            $capacities = \DC\Inventory::getTaxonomyValuesForPersonCapacity($count_filters);
         } else {
             $locations = $conditions = $years = $categories = $makes = $models = [];
             $priceRanges = $lengths = $horsepowers = $capacities = [];
         }
 
+        // Wrapper data attributes, assembled here to keep the markup readable.
+        $wrapper_atts = ' data-posts-per-page="' . absint($atts['posts_per_page']) . '"';
+
+        if (!empty($locked)) {
+            $wrapper_atts .= ' data-locked="' . esc_attr(wp_json_encode($locked)) . '"';
+        }
+
+        // When location is locked, the sidebar's location widget is hidden and
+        // the constraint can't be relaxed client-side. If the site has a header
+        // location selector, choosing a different location on this page would
+        // AND against the locked term and strand the visitor on a permanent
+        // zero-results page. Hand the JS a destination to send them to instead.
+        // Omitted when this page IS the site-wide inventory page, since
+        // redirecting to ourselves would only reapply the same lock.
+        if (isset($locked['location']) && function_exists('dealers_choice_get_inventory_page_url')) {
+            $handoff      = dealers_choice_get_inventory_page_url();
+            $current_page = get_permalink();
+
+            $handoff_path = $handoff ? untrailingslashit((string) wp_parse_url($handoff, PHP_URL_PATH)) : '';
+            $current_path = $current_page ? untrailingslashit((string) wp_parse_url($current_page, PHP_URL_PATH)) : '';
+
+            if ($handoff_path !== '' && $handoff_path !== $current_path) {
+                $wrapper_atts .= ' data-location-switch-url="' . esc_url($handoff) . '"';
+            }
+        }
         ?>
         <div class="dealerschoice-shortcode dealerschoice-inventory-shortcode">
-            <div id="inventory-wrapper" class="dealerschoice-inventory-wrapper" data-posts-per-page="<?php echo absint($atts['posts_per_page']); ?>">
+            <div id="inventory-wrapper" class="dealerschoice-inventory-wrapper"<?php echo $wrapper_atts; ?>>
                 <?php echo $not_found_message; ?>
+                <?php
+                // State the locked constraint in visible text. The sidebar
+                // hides widgets it considers already-applied, so without this
+                // the visitor (and any assistive tech) has no way to tell why
+                // the listing is narrower than the full inventory.
+                if (!empty($locked) && filter_var($atts['lock_notice'], FILTER_VALIDATE_BOOLEAN)) {
+                    $lock_labels = self::get_lock_labels($locked);
+
+                    if (!empty($lock_labels)) {
+                        printf(
+                            '<p class="dealerschoice-lock-notice">%s <strong>%s</strong></p>',
+                            esc_html__('Showing:', 'dealerschoice'),
+                            esc_html(implode(', ', $lock_labels))
+                        );
+                    }
+                }
+                ?>
                 <div class="dealerschoice-layout">
 
                     <?php if ($atts['show_filters']): ?>
@@ -345,9 +524,118 @@ class Shortcodes {
     }
 
     /**
+     * Parse the 'lock' / 'tax' shortcode attribute into validated constraints.
+     *
+     * Syntax: "key:slug" pairs separated by "|", with multiple slugs for one
+     * key separated by ",". Slugs within a key are ORed; separate keys are
+     * ANDed. Examples:
+     *
+     *     lock="promotion:clearance"
+     *     lock="promotion:featured,clearance"
+     *     lock="promotion:clearance|location:north-shore"
+     *
+     * The key must be present in AJAX_Handlers::get_lockable_taxonomy_map(),
+     * otherwise the pair is dropped. Output is always run through
+     * sanitize_locked_constraints(), so the return value is safe to hand
+     * straight to a tax_query.
+     *
+     * @param string $lock Raw attribute value.
+     * @return array<string,array<int,string>>
+     */
+    public static function parse_lock_attribute($lock) {
+        if (!is_string($lock) || trim($lock) === '') {
+            return [];
+        }
+
+        $parsed = [];
+
+        foreach (explode('|', $lock) as $pair) {
+            if (strpos($pair, ':') === false) {
+                continue;
+            }
+
+            list($key, $terms) = explode(':', $pair, 2);
+
+            $key   = sanitize_key(trim($key));
+            $terms = array_filter(array_map('trim', explode(',', $terms)), 'strlen');
+
+            if ($key === '' || empty($terms)) {
+                continue;
+            }
+
+            $parsed[$key] = isset($parsed[$key])
+                ? array_merge($parsed[$key], $terms)
+                : $terms;
+        }
+
+        return AJAX_Handlers::sanitize_locked_constraints($parsed);
+    }
+
+    /**
+     * Translate a lock/filter key into the key templates/filters.php expects.
+     *
+     * These layers grew separate naming schemes: the AJAX payload uses
+     * 'status', filters.php reads 'boat_status', and the taxonomy is
+     * 'boat_status'. Anything not listed passes through unchanged.
+     *
+     * Only ever called for keys that exist in get_filter_taxonomy_map(), i.e.
+     * ones that actually have a sidebar widget. Scoping-only taxonomies such
+     * as dc_promotions never reach this method.
+     *
+     * Note 'horsepower' maps to 'horsepower_range' for the widget but the
+     * taxonomy is registered as 'horsepower'. That mismatch is pre-existing
+     * and means a horsepower constraint zeroes the sidebar counts. Left alone
+     * here rather than fixed silently as part of a promotions change.
+     *
+     * @param string $lock_key
+     * @return string
+     */
+    public static function map_lock_key_to_filters_key($lock_key) {
+        $map = [
+            'status'     => 'boat_status',
+            'category'   => 'boat_type',
+            'price'      => 'price_range',
+            'length'     => 'length_range',
+            'horsepower' => 'horsepower_range',
+            'capacity'   => 'person_capacity',
+        ];
+
+        return isset($map[$lock_key]) ? $map[$lock_key] : $lock_key;
+    }
+
+    /**
+     * Resolve locked constraints to human-readable term names for display.
+     *
+     * Falls back to the raw slug only when the term can't be found, so a
+     * mistyped slug in the shortcode is visible on the page rather than
+     * silently rendering an empty notice.
+     *
+     * @param array $locked Validated constraints.
+     * @return array<int,string>
+     */
+    public static function get_lock_labels($locked) {
+        $map    = AJAX_Handlers::get_lockable_taxonomy_map();
+        $labels = [];
+
+        foreach ($locked as $lock_key => $terms) {
+            if (!isset($map[$lock_key])) {
+                continue;
+            }
+
+            foreach ($terms as $slug) {
+                $term = get_term_by('slug', $slug, $map[$lock_key]);
+                $labels[] = ($term && !is_wp_error($term)) ? $term->name : $slug;
+            }
+        }
+
+        return $labels;
+    }
+
+    /**
      * Inventory slider/carousel shortcode
      *
      * [dealerschoice_slider limit="6" category="pontoon" orderby="price"]
+     * [dealerschoice_slider promotion="featured" orderby="rand" limit="8"]
      */
     public static function slider_shortcode($atts) {
         $atts = shortcode_atts([
@@ -357,9 +645,13 @@ class Shortcodes {
             'location' => '',
             'make' => '',
             'year' => '',
+            'promotion' => '',
+            'tax' => '',
             'orderby' => 'date',
             'order' => 'DESC',
             'slides_to_show' => 3,
+            'autoplay' => false,
+            'autoplay_speed' => 3000,
         ], $atts, 'dealerschoice_slider');
 
         // Build query args
@@ -383,6 +675,14 @@ class Shortcodes {
             case 'length':
                 $args['orderby'] = 'meta_value_num';
                 $args['meta_key'] = 'boat_length_inches';
+                break;
+            case 'rand':
+                // Useful for promotion sliders at multi-location dealers, so
+                // one store's boats don't always lead. Note WP_Query rand
+                // ordering is not cacheable
+                // and gets expensive on large result sets, so keep 'limit'
+                // modest and don't pair this with a big posts_per_page.
+                $args['orderby'] = 'rand';
                 break;
             default:
                 $args['orderby'] = 'date';
@@ -431,6 +731,34 @@ class Shortcodes {
             ];
         }
 
+        // Additional taxonomy constraints via the 'promotion' and 'tax'
+        // attributes, using the same "key:slug" syntax as
+        // [dealerschoice_inventory lock=""]. This is how a promotion slider is
+        // scoped:
+        // [dealerschoice_slider promotion="featured" orderby="rand" limit="8"]
+        $taxonomy_map = AJAX_Handlers::get_lockable_taxonomy_map();
+
+        $slider_constraints = self::parse_lock_attribute($atts['tax']);
+
+        foreach (self::parse_lock_attribute('promotion:' . $atts['promotion']) as $tax_key => $tax_terms) {
+            $slider_constraints[$tax_key] = isset($slider_constraints[$tax_key])
+                ? array_values(array_unique(array_merge($slider_constraints[$tax_key], $tax_terms)))
+                : $tax_terms;
+        }
+
+        foreach ($slider_constraints as $tax_key => $tax_terms) {
+            if (!isset($taxonomy_map[$tax_key])) {
+                continue;
+            }
+
+            $tax_query[] = [
+                'taxonomy' => $taxonomy_map[$tax_key],
+                'field'    => 'slug',
+                'terms'    => $tax_terms,
+                'operator' => 'IN',
+            ];
+        }
+
         if (count($tax_query) > 1) {
             $args['tax_query'] = $tax_query;
         }
@@ -462,9 +790,20 @@ class Shortcodes {
         wp_enqueue_script('dealerschoice-slick');
         ob_start();
         $slider_id = 'dealerschoice-boat-slider-'.uniqid();
+
+        // Slick settings passed via the data-slick attribute. autoplaySpeed
+        // is only meaningful (and only included) when autoplay is on.
+        $slick_settings = [
+            'slidesToShow' => absint($atts['slides_to_show']),
+        ];
+
+        if (filter_var($atts['autoplay'], FILTER_VALIDATE_BOOLEAN)) {
+            $slick_settings['autoplay'] = true;
+            $slick_settings['autoplaySpeed'] = absint($atts['autoplay_speed']);
+        }
         ?>
         <div class="dealerschoice-shortcode dealerschoice-slider dc-mb">
-            <div class="boat-slider" id="<?php echo esc_html($slider_id); ?>" data-slick='{"slidesToShow": <?php echo esc_html(absint($atts['slides_to_show'])); ?>}'>
+            <div class="boat-slider" id="<?php echo esc_html($slider_id); ?>" data-slick="<?php echo esc_attr(wp_json_encode($slick_settings)); ?>">
                 <?php while ($query->have_posts()): $query->the_post(); ?>
                     <?php Template_Loader::get_template_part('inventory', 'slide'); ?>
                 <?php endwhile; ?>
@@ -593,6 +932,7 @@ class Shortcodes {
      * - title        (string) Quiz heading. Default: 'Find Your Perfect Boat'
      * - subtitle     (string) Sub-heading. Default: descriptive tagline.
      * - submit_label (string) Label on the final submit button.
+     * - boat_count   (int)    Number of matching boats to show in the result slider. Default: 3.
      *
      * @param array $atts Shortcode attributes.
      * @return string HTML output.
@@ -604,6 +944,7 @@ class Shortcodes {
                 'subtitle'        => __( 'Answer a few quick questions and we\'ll match you with the right vessel for the way you boat.', 'dealerschoice' ),
                 'submit_label'    => __( 'Find My Perfect Boat', 'dealerschoice' ),
                 'gravity_form_id' => 0,
+                'boat_count'      => 3,
             ],
             $atts,
             'dealerschoice_boat_quiz'
@@ -616,6 +957,7 @@ class Shortcodes {
         wp_enqueue_script( 'dealerschoice-boat-quiz' );
 
         $gravity_form_id = absint( $atts['gravity_form_id'] );
+        $boat_count      = min( 12, max( 1, absint( $atts['boat_count'] ) ) );
 
         // Pre-load Gravity Forms scripts/styles so they are available when the
         // result HTML is injected into the page via AJAX.
@@ -634,7 +976,7 @@ class Shortcodes {
         ob_start();
         Template_Loader::get_template(
             'shortcodes/boat-quiz.php',
-            compact( 'title', 'subtitle', 'submit_label', 'questions', 'total_steps', 'nonce', 'gravity_form_id' )
+            compact( 'title', 'subtitle', 'submit_label', 'questions', 'total_steps', 'nonce', 'gravity_form_id', 'boat_count' )
         );
         return ob_get_clean();
     }

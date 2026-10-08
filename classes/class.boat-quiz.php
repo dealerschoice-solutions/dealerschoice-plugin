@@ -241,14 +241,10 @@ class BoatQuiz {
 
     /**
      * Q4 — Budget (built from live price_range taxonomy terms).
-     * Terms are ordered by term_id (ascending) so cheaper ranges come first.
+     * Terms are ordered cheapest-first by the dollar figure in their name.
      */
     private static function question_budget(): array {
-        $raw = Inventory::getTaxonomyValuesForPriceRange( [] );
-        $terms = $raw['terms'] ?? [];
-
-        // Sort by term_id ascending so price tiers appear in natural order
-        usort( $terms, fn( $a, $b ) => $a['term']->term_id <=> $b['term']->term_id );
+        $terms = self::get_ordered_price_ranges();
 
         // Build dollar-sign display for up to 5 tiers ($, $$, $$$, $$$$, $$$$$)
         $dollar_signs = [ '$', '$$', '$$$', '$$$$', '$$$$$' ];
@@ -288,15 +284,77 @@ class BoatQuiz {
         ];
     }
 
+    /**
+     * Return price_range terms (with counts) ordered cheapest-first.
+     *
+     * Ordering by term_id assumes the dealer created the terms in ascending
+     * price order, which is not something we can rely on. Instead we read the
+     * first dollar figure out of the term name ("$100,000 - $200,000",
+     * "Under $50k", "$1M+") and sort on that, falling back to term_id for any
+     * term we can't parse.
+     *
+     * @return array[] Each element: [ 'term' => WP_Term, 'count' => int ]
+     */
+    private static function get_ordered_price_ranges(): array {
+        $raw   = Inventory::getTaxonomyValuesForPriceRange( [] );
+        $terms = $raw['terms'] ?? [];
+
+        usort( $terms, function( $a, $b ) {
+            $a_price = self::parse_price( $a['term']->name );
+            $b_price = self::parse_price( $b['term']->name );
+
+            // Unparseable terms sink to the bottom rather than jumbling the rest.
+            $a_key = $a_price ?? PHP_INT_MAX;
+            $b_key = $b_price ?? PHP_INT_MAX;
+
+            if ( $a_key !== $b_key ) {
+                return $a_key <=> $b_key;
+            }
+            return $a['term']->term_id <=> $b['term']->term_id;
+        } );
+
+        return $terms;
+    }
+
+    /**
+     * Pull the first dollar figure out of a price_range term name.
+     *
+     * Understands thousands separators and k/M suffixes, so "$100,000",
+     * "$100k" and "0.1M" all resolve to 100000.
+     *
+     * @param string $label
+     * @return int|null Null when no number is present.
+     */
+    private static function parse_price( string $label ): ?int {
+        if ( ! preg_match( '/([0-9][0-9,]*(?:\.[0-9]+)?)\s*([kKmM])?/', $label, $m ) ) {
+            return null;
+        }
+
+        $value = (float) str_replace( ',', '', $m[1] );
+
+        if ( ! empty( $m[2] ) ) {
+            $value *= ( strtolower( $m[2] ) === 'm' ) ? 1000000 : 1000;
+        }
+
+        return (int) round( $value );
+    }
+
     // ── Scoring ──────────────────────────────────────────────────────────────
+
+    /** Questions that contribute to a boat_type's match score. */
+    private const SCORED_QUESTIONS = [ 'activity', 'crew', 'priorities', 'budget' ];
 
     /**
      * Calculate the best-matching boat_type term(s) for a set of quiz answers.
      *
      * Only boat_type terms that have at least one published, visible boat are
-     * considered (uses get_terms with count > 0 filter).
+     * considered (uses get_terms with count > 0 filter). Terms that aren't
+     * boats at all (surfboards, trailers, apparel — see 'excluded_keywords')
+     * are dropped, and the remaining types are ranked on two independent
+     * signals: how well they fit the activity/crew/priority answers, and
+     * whether the dealer actually stocks that type inside the chosen budget.
      *
-     * @param array $answers  Keys: activity, crew, water, budget (all sanitized strings).
+     * @param array $answers  Keys: activity, crew, priorities, budget (all sanitized strings).
      * @return array {
      *     'top'    => WP_Term   The best-matching boat type term.
      *     'alts'   => WP_Term[] Up to 2 runner-up terms (may be empty).
@@ -321,40 +379,59 @@ class BoatQuiz {
             return [ 'top' => null, 'alts' => [], 'scores' => [] ];
         }
 
-        $scores = [];
-
-        foreach ( $terms as $term ) {
-            $slug  = $term->slug;
-            $name  = strtolower( $term->name );
-            $score = 0;
-
-            // ── 1. Explicit scoring table ────────────────────────────────
-            if ( isset( $scoring[ $slug ] ) ) {
-                foreach ( [ 'activity', 'crew', 'priorities' ] as $q ) {
-                    $answer = $answers[ $q ] ?? '';
-                    if ( $answer && isset( $scoring[ $slug ][ $q ][ $answer ] ) ) {
-                        $score += (int) $scoring[ $slug ][ $q ][ $answer ];
-                    }
-                }
-            } else {
-                // ── 2. Smart keyword fallback ────────────────────────────
-                foreach ( $keywords as $keyword => $boosts ) {
-                    if ( str_contains( $slug, $keyword ) || str_contains( $name, $keyword ) ) {
-                        foreach ( [ 'activity', 'crew', 'priorities' ] as $q ) {
-                            $answer = $answers[ $q ] ?? '';
-                            if ( $answer && isset( $boosts[ $q ][ $answer ] ) ) {
-                                $score += (int) $boosts[ $q ][ $answer ];
-                            }
-                        }
-                    }
-                }
-            }
-
-            $scores[ $slug ] = [ 'term' => $term, 'score' => $score ];
+        // Drop categories that aren't boats — a dealer who files "Electric
+        // Wake Surfboards" under boat_type should never have it recommended.
+        $candidates = array_values( array_filter( $terms, fn( $t ) => ! self::is_excluded_type( $t ) ) );
+        if ( empty( $candidates ) ) {
+            $candidates = $terms; // Never leave the quiz with nothing to say.
         }
 
-        // Sort descending by score, then by term post count as tiebreaker
-        uasort( $scores, function( $a, $b ) {
+        // How much inventory each boat type actually has in the chosen budget.
+        $budget       = (string) ( $answers['budget'] ?? '' );
+        $price_counts = self::get_price_fit_counts( $budget );
+        $price_active = array_sum( $price_counts ) > 0;
+        $hard_filter  = (bool) ( $config['price_fit']['hard_filter'] ?? true );
+
+        $scores = [];
+
+        foreach ( $candidates as $term ) {
+            $slug = $term->slug;
+
+            // ── 1. Explicit scoring table, else smart keyword fallback ────
+            $base = isset( $scoring[ $slug ] )
+                ? self::score_from_table( $scoring[ $slug ], $answers )
+                : self::score_from_keywords( $term, $keywords, $answers );
+
+            // ── 2. Price fit ─────────────────────────────────────────────
+            $in_budget = ! $price_active || ! empty( $price_counts[ $slug ] );
+            $price     = $price_active
+                ? self::price_fit_adjustment( (int) ( $price_counts[ $slug ] ?? 0 ), $config )
+                : 0;
+
+            $scores[ $slug ] = [
+                'term'      => $term,
+                'score'     => $base + $price,
+                'base'      => $base,
+                'price'     => $price,
+                'in_budget' => $in_budget,
+            ];
+        }
+
+        /**
+         * Filter the scored boat types before they are ranked.
+         *
+         * @param array $scores  slug => [ term, score, base, price, in_budget ]
+         * @param array $answers The submitted quiz answers.
+         * @param array $config  The merged quiz config.
+         */
+        $scores = apply_filters( 'dc_boat_quiz_scores', $scores, $answers, $config );
+
+        // Types the dealer actually stocks at this price rank first, then
+        // score, then how much inventory backs the recommendation.
+        uasort( $scores, function( $a, $b ) use ( $price_active, $hard_filter ) {
+            if ( $price_active && $hard_filter && $a['in_budget'] !== $b['in_budget'] ) {
+                return $a['in_budget'] ? -1 : 1;
+            }
             if ( $b['score'] !== $a['score'] ) {
                 return $b['score'] <=> $a['score'];
             }
@@ -377,17 +454,379 @@ class BoatQuiz {
         ];
     }
 
+    /**
+     * Score a boat type from its explicit entry in the scoring matrix.
+     *
+     * @param array $table    The per-question weights for one boat type.
+     * @param array $answers
+     * @return int
+     */
+    private static function score_from_table( array $table, array $answers ): int {
+        $score = 0;
+
+        foreach ( self::SCORED_QUESTIONS as $q ) {
+            $answer = $answers[ $q ] ?? '';
+            if ( $answer !== '' && isset( $table[ $q ][ $answer ] ) ) {
+                $score += (int) $table[ $q ][ $answer ];
+            }
+        }
+
+        return $score;
+    }
+
+    /**
+     * Score a boat type that has no explicit entry, using keyword matching.
+     *
+     * Each question takes the BEST score among the matching keywords rather
+     * than the sum of all of them. Summing let a term inflate itself simply by
+     * having a long name: "wake surf" matched both 'wake' and 'surf' and
+     * collected both payouts, out-scoring purpose-built tow boats that were
+     * capped by the explicit matrix.
+     *
+     * @param \WP_Term $term
+     * @param array    $keywords
+     * @param array    $answers
+     * @return int
+     */
+    private static function score_from_keywords( \WP_Term $term, array $keywords, array $answers ): int {
+        $matches = self::match_keywords( $term, $keywords );
+
+        if ( empty( $matches ) ) {
+            return 0;
+        }
+
+        $score = 0;
+
+        foreach ( self::SCORED_QUESTIONS as $q ) {
+            $answer = $answers[ $q ] ?? '';
+            if ( $answer === '' ) {
+                continue;
+            }
+
+            $best = 0;
+            foreach ( $matches as $boosts ) {
+                if ( isset( $boosts[ $q ][ $answer ] ) ) {
+                    $best = max( $best, (int) $boosts[ $q ][ $answer ] );
+                }
+            }
+            $score += $best;
+        }
+
+        return $score;
+    }
+
+    /**
+     * Find the keywords that describe a boat_type term.
+     *
+     * Matching is word-aware, in two tiers. A keyword that matches a whole
+     * word in the slug or name is an exact match; if — and only if — a term
+     * has no exact matches do we fall back to prefix matches so compound
+     * slugs like "bowriders" and "wakeboard-boats" still resolve. Plain
+     * substring matching (the previous behaviour) made 'ski' match "skiff" and
+     * 'bay' match "bayliner", scoring fishing boats as tow boats.
+     *
+     * Keywords that are substrings of unrelated boating words can opt out of
+     * the prefix tier with 'match' => 'exact' in the config.
+     *
+     * @param \WP_Term $term
+     * @param array    $keywords
+     * @return array[] keyword => boosts
+     */
+    private static function match_keywords( \WP_Term $term, array $keywords ): array {
+        $tokens   = self::tokenize( $term );
+        $haystack = self::normalize( $term->slug . ' ' . $term->name );
+
+        $exact = [];
+        $prefix = [];
+
+        foreach ( $keywords as $keyword => $boosts ) {
+            $kw = strtolower( trim( (string) $keyword ) );
+
+            if ( $kw === '' || ! is_array( $boosts ) ) {
+                continue;
+            }
+
+            // Multi-word keywords ("center console") are matched as a phrase.
+            if ( strpbrk( $kw, ' -_' ) !== false ) {
+                if ( str_contains( $haystack, self::normalize( $kw ) ) ) {
+                    $exact[ $kw ] = $boosts;
+                }
+                continue;
+            }
+
+            if ( in_array( $kw, $tokens, true )
+                || in_array( $kw . 's', $tokens, true )
+                || in_array( $kw . 'es', $tokens, true ) ) {
+                $exact[ $kw ] = $boosts;
+                continue;
+            }
+
+            if ( ( $boosts['match'] ?? '' ) === 'exact' ) {
+                continue;
+            }
+
+            foreach ( $tokens as $token ) {
+                if ( strlen( $token ) > strlen( $kw ) && str_starts_with( $token, $kw ) ) {
+                    $prefix[ $kw ] = $boosts;
+                    break;
+                }
+            }
+        }
+
+        return $exact ?: $prefix;
+    }
+
+    /**
+     * Decide whether a boat_type term is something other than a boat.
+     *
+     * Dealers routinely file accessories (surfboards, foils, trailers,
+     * apparel) under boat_type so they show up in inventory. Those terms must
+     * never be recommended as "your perfect match". A term that also reads as
+     * a boat ("Wakeboard Boats") is kept.
+     *
+     * @param \WP_Term $term
+     * @return bool
+     */
+    private static function is_excluded_type( \WP_Term $term ): bool {
+        $config  = self::load_config();
+        $blocked = array_map( 'strtolower', (array) ( $config['excluded_keywords'] ?? [] ) );
+
+        $excluded = false;
+
+        if ( ! empty( $blocked ) ) {
+            $vessel   = array_map( 'strtolower', (array) ( $config['vessel_keywords'] ?? [] ) );
+            $tokens   = self::tokenize( $term );
+            $haystack = self::normalize( $term->slug . ' ' . $term->name );
+
+            // English puts the head noun last, and the head noun is what the
+            // category actually IS: "Wakeboard Boats" is a boat, "Boat
+            // Trailers" is not. Checking the whole label instead would let any
+            // accessory named after a boat slip through.
+            $head = self::head_noun( $term );
+
+            if ( $head !== '' && self::matches_word( $head, $blocked ) ) {
+                $excluded = true;
+            } elseif ( $head !== '' && in_array( $head, $vessel, true ) ) {
+                $excluded = false;
+            } else {
+                foreach ( $blocked as $needle ) {
+                    $needle = trim( $needle );
+                    if ( $needle === '' ) {
+                        continue;
+                    }
+                    if ( self::matches_word( $needle, $tokens ) ) {
+                        $excluded = true;
+                        break;
+                    }
+                    // Longer, unambiguous nouns also match inside a compound
+                    // token ("electric-wakesurfboards"). Short generic words
+                    // like "prop" or "tube" must stand alone to count.
+                    if ( strlen( $needle ) >= 6 && str_contains( $haystack, self::normalize( $needle ) ) ) {
+                        $excluded = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        /**
+         * Filter whether a boat_type term is excluded from quiz results.
+         *
+         * @param bool     $excluded
+         * @param \WP_Term $term
+         */
+        return (bool) apply_filters( 'dc_boat_quiz_exclude_type', $excluded, $term );
+    }
+
+    /**
+     * The last significant word of a term's display name.
+     *
+     * @param \WP_Term $term
+     * @return string Empty when the name yields no usable words.
+     */
+    private static function head_noun( \WP_Term $term ): string {
+        $words = preg_split(
+            '/[^a-z0-9]+/',
+            strtolower( wp_strip_all_tags( html_entity_decode( $term->name ) ) ),
+            -1,
+            PREG_SPLIT_NO_EMPTY
+        ) ?: [];
+
+        // "Boats for Sale", "Boats & More" — trailing filler isn't the head noun.
+        $filler = [ 'for', 'sale', 'and', 'or', 'more', 'other', 'new', 'used', 'all' ];
+        while ( ! empty( $words ) && in_array( end( $words ), $filler, true ) ) {
+            array_pop( $words );
+        }
+
+        return empty( $words ) ? '' : (string) end( $words );
+    }
+
+    /**
+     * Whether $word appears in $candidates, tolerating simple plurals.
+     *
+     * @param string   $word
+     * @param string[] $candidates
+     * @return bool
+     */
+    private static function matches_word( string $word, array $candidates ): bool {
+        foreach ( $candidates as $candidate ) {
+            $candidate = strtolower( trim( (string) $candidate ) );
+            if ( $candidate === '' ) {
+                continue;
+            }
+            if ( $word === $candidate
+                || $word === $candidate . 's'
+                || $word === $candidate . 'es'
+                || $candidate === $word . 's'
+                || $candidate === $word . 'es' ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Split a term's slug and name into lowercase word tokens.
+     *
+     * @param \WP_Term $term
+     * @return string[]
+     */
+    private static function tokenize( \WP_Term $term ): array {
+        $parts = preg_split(
+            '/[^a-z0-9]+/',
+            strtolower( $term->slug . ' ' . wp_strip_all_tags( html_entity_decode( $term->name ) ) ),
+            -1,
+            PREG_SPLIT_NO_EMPTY
+        );
+
+        return array_values( array_unique( $parts ?: [] ) );
+    }
+
+    /** Strip everything but letters and digits, for phrase comparisons. */
+    private static function normalize( string $value ): string {
+        return preg_replace( '/[^a-z0-9]+/', '', strtolower( $value ) ) ?? '';
+    }
+
+    /**
+     * Count, per boat_type, how many visible boats fall inside the budget.
+     *
+     * This is the price signal the quiz was missing: rather than guessing at
+     * what a type "should" cost, we ask the dealer's own inventory. A type
+     * with nothing in the chosen range can't be a sensible recommendation for
+     * that range, whatever its keywords say.
+     *
+     * @param string $price_range_slug
+     * @return array<string,int> slug => count (empty when no budget was given)
+     */
+    private static function get_price_fit_counts( string $price_range_slug ): array {
+        if ( $price_range_slug === '' || $price_range_slug === 'any' ) {
+            return [];
+        }
+
+        $raw    = Inventory::getTaxonomyValuesForBoatType( [ 'price_range' => [ $price_range_slug ] ] );
+        $counts = [];
+
+        foreach ( $raw['terms'] ?? [] as $item ) {
+            $counts[ $item['term']->slug ] = (int) $item['count'];
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Convert an in-budget inventory count into a score adjustment.
+     *
+     * @param int   $count  Visible boats of this type inside the budget.
+     * @param array $config Merged quiz config.
+     * @return int
+     */
+    private static function price_fit_adjustment( int $count, array $config ): int {
+        $settings = $config['price_fit'] ?? [];
+
+        $bonus     = (int) ( $settings['in_budget_bonus'] ?? 4 );
+        $penalty   = (int) ( $settings['out_of_budget_penalty'] ?? 6 );
+        $depth_cap = (int) ( $settings['depth_bonus_cap'] ?? 2 );
+        $per_depth = max( 1, (int) ( $settings['boats_per_depth_point'] ?? 3 ) );
+
+        if ( $count <= 0 ) {
+            return -$penalty;
+        }
+
+        // Nudge types where the dealer has real selection at this price.
+        return $bonus + min( $depth_cap, (int) floor( $count / $per_depth ) );
+    }
+
     // ── Inventory lookup ─────────────────────────────────────────────────────
 
     /**
      * Fetch a small set of matching boats to display on the result screen.
      *
-     * @param string $boat_type_slug    Slug of the recommended boat_type term.
-     * @param string $price_range_slug  Slug of the chosen price_range term (or '' / 'any').
-     * @param int    $count             Max number of boats to return (default 3).
+     * Boats inside the chosen budget always come first. If there aren't enough
+     * of them we widen to the neighbouring price ranges, cheapest gap first,
+     * rather than jumping straight to unfiltered inventory — that fallback is
+     * what let a $100k–$200k answer come back with $18k stock.
+     *
+     * @param string     $boat_type_slug    Slug of the recommended boat_type term.
+     * @param string     $price_range_slug  Slug of the chosen price_range term (or '' / 'any').
+     * @param int        $count             Max number of boats to return (default 3).
+     * @param array|null $meta              Receives [ 'budget_respected' => bool, 'widened' => bool ].
      * @return int[] Array of post IDs.
      */
-    public static function get_matching_boats( string $boat_type_slug, string $price_range_slug, int $count = 3 ): array {
+    public static function get_matching_boats( string $boat_type_slug, string $price_range_slug, int $count = 3, ?array &$meta = null ): array {
+        $has_budget = $price_range_slug && $price_range_slug !== 'any';
+        $meta       = [ 'budget_respected' => true, 'widened' => false ];
+
+        $ids = self::query_boats( $boat_type_slug, $has_budget ? [ $price_range_slug ] : [], $count );
+
+        if ( count( $ids ) >= $count || ! $has_budget ) {
+            return array_slice( $ids, 0, $count );
+        }
+
+        $config = self::load_config();
+        $tiers  = max( 0, (int) ( $config['price_fit']['widen_tiers'] ?? 1 ) );
+
+        // Widen outward through the neighbouring price tiers — but only a step
+        // or two. Walking the whole ladder is how a "$200k+" answer ended up
+        // showing $18k stock and calling it a match.
+        foreach ( self::get_adjacent_price_ranges( $price_range_slug, $tiers ) as $slug ) {
+            $found = self::query_boats( $boat_type_slug, [ $slug ], $count - count( $ids ), $ids );
+
+            if ( $found ) {
+                $ids            = array_merge( $ids, $found );
+                $meta['widened'] = true;
+            }
+
+            if ( count( $ids ) >= $count ) {
+                return array_slice( $ids, 0, $count );
+            }
+        }
+
+        // Last resort: any boat of the right type. Flag it so the caller knows
+        // the budget could not be honoured.
+        $found = self::query_boats( $boat_type_slug, [], $count - count( $ids ), $ids );
+
+        if ( $found ) {
+            $ids                        = array_merge( $ids, $found );
+            $meta['budget_respected']   = false;
+        }
+
+        return array_slice( $ids, 0, $count );
+    }
+
+    /**
+     * Run one visible-boat query for a type, optionally constrained by price.
+     *
+     * @param string   $boat_type_slug
+     * @param string[] $price_range_slugs Empty for no price constraint.
+     * @param int      $count
+     * @param int[]    $exclude
+     * @return int[]
+     */
+    private static function query_boats( string $boat_type_slug, array $price_range_slugs, int $count, array $exclude = [] ): array {
+        if ( $count < 1 ) {
+            return [];
+        }
+
         $tax_query = [
             'relation' => 'AND',
             [
@@ -397,11 +836,11 @@ class BoatQuiz {
             ],
         ];
 
-        if ( $price_range_slug && $price_range_slug !== 'any' ) {
+        if ( ! empty( $price_range_slugs ) ) {
             $tax_query[] = [
                 'taxonomy' => 'price_range',
                 'field'    => 'slug',
-                'terms'    => [ $price_range_slug ],
+                'terms'    => $price_range_slugs,
             ];
         }
 
@@ -409,8 +848,6 @@ class BoatQuiz {
             'post_type'      => 'boat',
             'post_status'    => 'publish',
             'posts_per_page' => $count,
-            #'orderby'        => 'date',
-            #'order'          => 'DESC',
             'meta_key'       => 'boat_saleprice',
             'orderby'        => 'meta_value_num',
             'order'          => 'DESC',
@@ -430,28 +867,45 @@ class BoatQuiz {
             ],
         ];
 
+        if ( ! empty( $exclude ) ) {
+            $args['post__not_in'] = $exclude;
+        }
+
         $query = new \WP_Query( $args );
         $ids   = $query->posts;
         wp_reset_postdata();
 
-        // If we didn't get enough boats with price filter, try without it
-        if ( count( $ids ) < $count && $price_range_slug && $price_range_slug !== 'any' ) {
-            $args['tax_query'] = [
-                [
-                    'taxonomy' => 'boat_type',
-                    'field'    => 'slug',
-                    'terms'    => [ $boat_type_slug ],
-                ],
-            ];
-            $args['posts_per_page'] = $count - count( $ids );
-            $args['post__not_in']   = $ids ?: [ 0 ];
+        return $ids;
+    }
 
-            $fallback_query = new \WP_Query( $args );
-            $ids            = array_merge( $ids, $fallback_query->posts );
-            wp_reset_postdata();
+    /**
+     * Price range slugs nearest to the given one, closest first.
+     *
+     * @param string $price_range_slug
+     * @param int    $max_offset How many tiers out to travel (0 = none).
+     * @return string[]
+     */
+    private static function get_adjacent_price_ranges( string $price_range_slug, int $max_offset = 1 ): array {
+        $slugs = array_column( array_column( self::get_ordered_price_ranges(), 'term' ), 'slug' );
+
+        $index = array_search( $price_range_slug, $slugs, true );
+
+        if ( $index === false || $max_offset < 1 ) {
+            return [];
         }
 
-        return array_slice( $ids, 0, $count );
+        $neighbours = [];
+        $limit      = min( $max_offset, count( $slugs ) - 1 );
+
+        for ( $offset = 1; $offset <= $limit; $offset++ ) {
+            foreach ( [ $index - $offset, $index + $offset ] as $i ) {
+                if ( isset( $slugs[ $i ] ) ) {
+                    $neighbours[] = $slugs[ $i ];
+                }
+            }
+        }
+
+        return $neighbours;
     }
 
     /**

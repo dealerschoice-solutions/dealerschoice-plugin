@@ -3,7 +3,7 @@
  * Plugin Name: DealersChoice Solutions
  * Plugin URI: https://www.dealerschoicesolutions.com
  * Description: A comprehensive dealership inventory management plugin that syncs boat listings from your DMS to WordPress with automatic categorization, image management, and advanced filtering.
- * Version: 1.0.7
+ * Version: 1.0.8
  * Author: DealersChoice, by Mannix Marketing
  * Author URI: https://www.dealerschoicesolutions.com
  * License: GPL2
@@ -11,11 +11,11 @@
  * Text Domain: dealers-choice
  * Requires at least: 6.0
  * Requires PHP: 7.4
- * 
+ *
  * @package DealersChoice
  * @author Mannix Marketing
  * @copyright 2026 Mannix Marketing
- * 
+ *
  * This plugin provides:
  * - Automatic inventory sync from DealersChoice API
  * - Custom 'boat' post type
@@ -24,7 +24,7 @@
  * - Local listing support for manual inventory additions
  * - Draft management with automatic cleanup
  * - Manual sync trigger (Admin UI and WP-CLI)
- * 
+ *
  * Dependencies:
  * - Advanced Custom Fields (ACF) - Required
  * - DealersChoice API credentials - Required for sync
@@ -44,21 +44,21 @@ register_deactivation_hook(__FILE__, 'dealers_choice_deactivate');
 function dealers_choice_activate() {
     registerCustomPostTypeAndTaxonomies();
     flush_rewrite_rules();
-    
+
     // Set default options
     add_option('dealers_choice_log_enabled', '1');
-    
+
     // Add database indexes for better query performance
     dealers_choice_add_database_indexes();
 
     // Create favorites analytics table
     dealers_choice_create_favorites_table();
-    
+
     // Schedule automatic inventory sync (twice daily)
     if (!wp_next_scheduled('dealerschoice_inventory_sync_cron')) {
         wp_schedule_event(time(), 'twicedaily', 'dealerschoice_inventory_sync_cron');
     }
-    
+
     // Log activation
     dealers_choice_log('Plugin activated', 'info');
 }
@@ -102,10 +102,10 @@ function dealers_choice_create_favorites_table() {
  */
 function dealers_choice_add_database_indexes() {
     global $wpdb;
-    
+
     // Check if indexes already exist before adding
     $indexes = $wpdb->get_results("SHOW INDEX FROM {$wpdb->postmeta} WHERE Key_name = 'meta_key_value'");
-    
+
     if (empty($indexes)) {
         // Add composite index on meta_key and meta_value for faster ACF field queries
         $wpdb->query("ALTER TABLE {$wpdb->postmeta} ADD INDEX meta_key_value (meta_key(191), meta_value(100))");
@@ -122,21 +122,21 @@ function dealers_choice_deactivate() {
     if ($timestamp) {
         wp_unschedule_event($timestamp, 'delete_old_draft_boats_cron');
     }
-    
+
     $sync_timestamp = wp_next_scheduled('dealerschoice_inventory_sync_cron');
     if ($sync_timestamp) {
         wp_unschedule_event($sync_timestamp, 'dealerschoice_inventory_sync_cron');
     }
-    
+
     flush_rewrite_rules();
-    
+
     // Log deactivation
     dealers_choice_log('Plugin deactivated', 'info');
 }
 
 /**
  * Logging function for the plugin
- * 
+ *
  * @param string $message Log message
  * @param string $level Log level: info, warning, error
  * @param array $context Additional context
@@ -146,7 +146,7 @@ function dealers_choice_log($message, $level = 'info', $context = []) {
     if (!get_option('dealers_choice_log_enabled', '1')) {
         return;
     }
-    
+
     // Format the log message
     $formatted_message = sprintf(
         '[DealersChoice] [%s] %s',
@@ -397,12 +397,12 @@ if (is_admin()) {
         // add submenu link to DealersChoice IMS (https://dealerschoiceims.securem2.com) to DealersChoice admin menu
         global $submenu;
         $submenu['dealers-choice-settings'][] = array(
-            'DealersChoice IMS <span class="dashicons dashicons-external" style="display:inline; font-size: 14px; vertical-align: -1px;"></span>', 
-            'manage_options', 
+            'DealersChoice IMS <span class="dashicons dashicons-external" style="display:inline; font-size: 14px; vertical-align: -1px;"></span>',
+            'manage_options',
             'https://dealerschoiceims.securem2.com'
         );
     });
-    
+
     // Add inline CSS for menu icon sizing on all admin pages
     add_action('admin_head', function() {
         echo '<style>
@@ -522,10 +522,83 @@ function registerCustomPostTypeAndTaxonomies() {
         );
     }
 
+    /**
+     * Promotions Taxonomy
+     * Terms are intentionally NOT provided by inventory sync or plugin.
+     * Each dealer names their own promotions in the WordPress admin
+     * ("Featured", "Clearance", "Manager's Special", or whatever their marketing uses)
+     * The plugin ships the container for dealer merchandising, never the vocabulary,
+     * so no client's conventions are baked into code shared across sites.
+     */
+    register_taxonomy(
+        'dc_promotions',
+        'boat',
+        [
+            'labels' => [
+                'name'              => __('Promotions', 'dealers-choice'),
+                'singular_name'     => __('Promotion', 'dealers-choice'),
+                'search_items'      => __('Search Promotions', 'dealers-choice'),
+                'all_items'         => __('All Promotions', 'dealers-choice'),
+                'edit_item'         => __('Edit Promotion', 'dealers-choice'),
+                'update_item'       => __('Update Promotion', 'dealers-choice'),
+                'add_new_item'      => __('Add New Promotion', 'dealers-choice'),
+                'new_item_name'     => __('New Promotion Name', 'dealers-choice'),
+                'not_found'         => __('No promotions found', 'dealers-choice'),
+                'menu_name'         => __('Promotions', 'dealers-choice'),
+            ],
+            "public" => false,
+            "publicly_queryable" => false,
+            "hierarchical" => true,
+            "show_ui" => true,
+            "show_in_menu" => true,
+            "show_in_nav_menus" => false,
+            "query_var" => false,
+            "rewrite" => false,
+            "show_admin_column" => true,
+            "show_in_rest" => true,
+            "show_tagcloud" => false,
+            "capabilities" => [
+                'manage_terms' => 'manage_options',
+                'edit_terms'   => 'manage_options',
+                'delete_terms' => 'manage_options',
+                'assign_terms' => 'edit_posts',
+            ],
+        ]
+    );
+
     // Create range taxonomy terms
     dealers_choice_create_range_terms();
 }
 add_action('init', 'registerCustomPostTypeAndTaxonomies');
+
+/**
+ * Resolve the URL of the site-wide inventory page.
+ *
+ * Resolution order: the explicit 'dealers_choice_inventory_page_id' option,
+ * then a page at the /inventory/ path, then home_url('/inventory/').
+ *
+ * NOTE: this same lookup is currently duplicated in
+ * DC\BoatQuiz::build_inventory_url() and DC\Redirects::get_inventory_page_url().
+ * Those two should be refactored onto this function so the resolution order
+ * only lives in one place; left alone for now to keep this change reviewable.
+ *
+ * @return string Absolute URL, or '' if it cannot be resolved.
+ */
+function dealers_choice_get_inventory_page_url() {
+    $page_id = (int) get_option('dealers_choice_inventory_page_id', 0);
+
+    if (!$page_id) {
+        $page = get_page_by_path('inventory');
+
+        if ($page) {
+            $page_id = (int) $page->ID;
+        }
+    }
+
+    $url = $page_id ? get_permalink($page_id) : home_url('/inventory/');
+
+    return $url ? (string) $url : '';
+}
 
 /**
  * Allow for the inventory "boat_type" in the URL
@@ -1809,6 +1882,7 @@ function dealers_choice_reveal_price_settings() {
         'nonce'                  => wp_create_nonce('dealerschoice_reveal_price_nonce'),
         'popupId'                => get_option('dealers_choice_popup_form_id', ''),
         'gravityFormId'          => get_option('dealers_choice_reveal_price_gravity_form_id', ''),
+        'revealScope'            => get_option('dealers_choice_reveal_price_scope', 'all'),
         'allowedZips'            => $allowed_zips,
         'locationRequestMessage' => wp_unslash( get_option('dealers_choice_location_request_message', '') ),
         'locationVerifiedMessage' => wp_unslash( get_option('dealers_choice_location_verified_message', '') ),
@@ -1862,54 +1936,67 @@ function dealers_choice_gf_stamp_field_attributes($field_content, $field, $value
 }
 
 /**
- * After a Reveal Price form is submitted, look up the boat price by the submitted
- * inventory ID and write it back into the priceValue entry field.
+ * Format a boat's sale price exactly as the Reveal Price button displays it.
+ * Returns an empty string when the boat is not a published boat or has no usable price.
  */
-add_action('gform_after_submission', 'dealers_choice_populate_price_in_entry', 10, 2);
-function dealers_choice_populate_price_in_entry($entry, $form) {
+function dealers_choice_get_revealable_price($post_id) {
+    $post_id = absint($post_id);
+    if (!$post_id || get_post_type($post_id) !== 'boat' || get_post_status($post_id) !== 'publish') {
+        return '';
+    }
+
+    $price = get_post_meta($post_id, 'boat_saleprice', true);
+    if (!$price || !is_numeric($price) || (float) $price <= 0) {
+        return '';
+    }
+
+    return '$' . number_format((float) $price);
+}
+
+/**
+ * When a Reveal Price form is submitted, write the price the visitor was shown into the
+ * priceValue field before the entry is saved and before notifications / feeds run, so
+ * {all_fields}, the field's merge tag, and CRM add-ons all receive it.
+ *
+ * The price is resolved server-side and never sent to the browser in the form. Whatever was
+ * posted for priceValue is always overwritten, so a visitor cannot inject their own value.
+ * The value is frozen at submission time; later inventory syncs do not change the entry.
+ */
+add_action('gform_pre_submission', 'dealers_choice_populate_price_in_entry');
+function dealers_choice_populate_price_in_entry($form) {
     $reveal_form_id = get_option('dealers_choice_reveal_price_gravity_form_id', '');
     if (empty($reveal_form_id) || (int) $form['id'] !== (int) $reveal_form_id) {
         return;
     }
 
-    // Find the inventoryID and priceValue fields by their inputName (parameter name).
-    $inventory_field_id  = null;
+    // Find our fields by their inputName (parameter name).
+    $inventory_field_id   = null;
+    $status_field_id      = null;
     $price_value_field_id = null;
     foreach ($form['fields'] as $field) {
-        if ($field->inputName === 'inventoryID')  { $inventory_field_id  = $field->id; }
-        if ($field->inputName === 'priceValue')   { $price_value_field_id = $field->id; }
+        if ($field->inputName === 'inventoryID') { $inventory_field_id   = $field->id; }
+        if ($field->inputName === 'priceStatus') { $status_field_id      = $field->id; }
+        if ($field->inputName === 'priceValue')  { $price_value_field_id = $field->id; }
     }
 
-    if (!$inventory_field_id || !$price_value_field_id) {
+    if (!$price_value_field_id) {
         return;
     }
 
-    $inventory_id = rgar($entry, (string) $inventory_field_id);
-    if (empty($inventory_id)) {
-        return;
+    $price_key = 'input_' . $price_value_field_id;
+
+    // The JS only reveals the price when there are no zip restrictions, or when the
+    // visitor's location was verified. Mirror that here; anything else was not shown.
+    $allowed_zips = trim((string) get_option('dealers_choice_allowed_zips', ''));
+    $status       = $status_field_id ? sanitize_text_field(wp_unslash(rgpost('input_' . $status_field_id))) : '';
+    $was_shown    = $allowed_zips === '' || $status === 'Verified in sales area';
+
+    $price = '';
+    if ($was_shown && $inventory_field_id) {
+        $price = dealers_choice_get_revealable_price(wp_unslash(rgpost('input_' . $inventory_field_id)));
     }
 
-    // Find the boat post by its inventory ID stored in ACF / post meta.
-    $posts = get_posts([
-        'post_type'      => 'boat',
-        'posts_per_page' => 1,
-        'meta_query'     => [[
-            'key'   => 'inventory_id',
-            'value' => $inventory_id,
-        ]],
-        'fields' => 'ids',
-    ]);
-
-    if (empty($posts)) {
-        return;
-    }
-
-    $price = get_field('saleprice', $posts[0]);
-    if (empty($price)) {
-        return;
-    }
-
-    GFAPI::update_entry_field($entry['id'], $price_value_field_id, $price);
+    $_POST[$price_key] = $price !== '' ? $price : 'Not Shown';
 }
 
 /**
@@ -2054,6 +2141,92 @@ function dealers_choice_sort_boats_by_column($query) {
 }
 
 /**
+ * Extend the Inventory list table's search box to also match Stock Number and
+ * HIN, so staff can pull up a listing by either without needing extra plugins.
+ *
+ * This does not implement the search itself. DC\AJAX_Handlers::search_stock_and_hin()
+ * is already registered on 'posts_search' for every request, admin included,
+ * and ORs an EXISTS subquery against the given meta keys onto WP's title and
+ * content match. It acts only on queries carrying the two flags below, so all
+ * this needs to do is set them on the admin list-table query. The frontend
+ * inventory search opts in the same way, via
+ * DC\AJAX_Handlers::build_inventory_query_args(), which keeps one copy of the
+ * SQL behind both.
+ *
+ * The frontend also passes dc_search_extra_taxonomies for boat_type, because a
+ * visitor searching "pontoon" is naming a category rather than a listing. That
+ * is deliberately left off here: staff searching this screen are looking up a
+ * specific unit, and the Location and category columns plus the filter
+ * dropdowns already cover browsing by taxonomy.
+ *
+ * @param WP_Query $query Current query.
+ */
+add_action('pre_get_posts', 'dealers_choice_admin_search_stock_and_hin');
+function dealers_choice_admin_search_stock_and_hin($query) {
+    if (!is_admin() || !$query->is_main_query() || 'boat' !== $query->get('post_type')) {
+        return;
+    }
+
+    // is_search() is false when the search box is submitted empty, in which
+    // case core generates no search clause for the filter to extend anyway.
+    if (!$query->is_search()) {
+        return;
+    }
+
+    $query->set('dc_search_extra_meta_keys', ['boat_stock_number', 'boat_hin']);
+}
+
+/**
+ * Add a Location filter dropdown to the Inventory list table.
+ *
+ * Location is a taxonomy, so the Location column cannot be made sortable the
+ * way stock_number/saleprice/boat_year are (there is no single meta value to
+ * order on). A filter dropdown gives dealers with multiple locations the same
+ * practical result: they select a location and see only that location's boats.
+ *
+ * No pre_get_posts handling is needed. The 'location' taxonomy is registered
+ * with query_var => true, and WP_Taxonomy::add_rewrite_rules() registers the
+ * query var in the admin even for a taxonomy that is not publicly queryable,
+ * so the main list-table query picks up ?location=<slug> on its own.
+ *
+ * @param string $post_type The post type of the list table being rendered.
+ */
+add_action('restrict_manage_posts', 'dealers_choice_location_filter_dropdown');
+function dealers_choice_location_filter_dropdown($post_type) {
+    if ('boat' !== $post_type) {
+        return;
+    }
+
+    $taxonomy = 'location';
+
+    // get_terms() returns a WP_Error for an unregistered taxonomy, which
+    // wp_dropdown_categories() would then try to walk as a term list.
+    if (!taxonomy_exists($taxonomy)) {
+        return;
+    }
+
+    // hide_empty is false so every configured location stays selectable even
+    // when its boats are all drafts (term counts only include published posts);
+    // hide_if_empty suppresses the whole control on a site with no locations,
+    // which in turn keeps the Filter button from appearing on its own.
+    //
+    // The "All Locations" option is emitted with value="0", which PHP's empty()
+    // treats as unset, so WP_Query::parse_tax_query() skips the taxonomy clause
+    // entirely and the unfiltered list is returned.
+    wp_dropdown_categories([
+        'taxonomy'        => $taxonomy,
+        'name'            => $taxonomy,
+        'value_field'     => 'slug',
+        'show_option_all' => __('All Locations', 'dealers-choice'),
+        'selected'        => isset($_GET[$taxonomy]) ? sanitize_text_field(wp_unslash($_GET[$taxonomy])) : '',
+        'hide_empty'      => false,
+        'hide_if_empty'   => true,
+        'orderby'         => 'name',
+        'order'           => 'ASC',
+    ]);
+}
+
+/**
  * Create an admin dashboard widget to show inventory stats
  */
 function dealers_choice_register_dashboard_widgets() {
@@ -2112,7 +2285,7 @@ function dealers_choice_fix_mime_types($data, $file, $filename, $mimes) {
     if (empty($file_ext) && isset($_GET['name'])) {
         $real_filename = sanitize_file_name($_GET['name']);
         $real_ext = strtolower(pathinfo($real_filename, PATHINFO_EXTENSION));
-        
+
         $allowed_exts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
 
         if (in_array($real_ext, $allowed_exts)) {
