@@ -108,6 +108,21 @@ Available commands:
 * `wp dealers-choice stats` - Display plugin statistics
 
 == Changelog ==
+### 1.0.8.1
+- Minor plugin security fixes
+- Added a "Shop Other Locations" setting. When a multi-location marina filters by location, they can enable a "Shop Other Locations" block that shows up after the current location's inventory with similar boats available at their other locations.
+
+### 1.0.8
+- Minor plugin settings and display updates
+- Fix: Reveal Price system now tracks displayed price in form submission
+- Enhancement: Added special 'Promotions' taxonomy to allow custom flags like Featured, Quick Sales, etc.
+- Enhancement: Admin listing table now allows for Stock and HIN search as well as Location filters
+- Fix: When the shortcode sets a filter, clicking 'clear all filters' would clear even the set filters. Shortcode now locks those filters.
+- Enhancement: Boat quiz results now include an optional number of boats to show in the slider
+- Fix: Image import now checks order of images from the API and ensures gallery order matches
+- Enhancement: Inventory Sliders now allow autoplay via shortcode attribute
+- Enhancement: Added settings for Reveal Price system to unlock all prices or only the unit in which the button was clicked
+
 ### 1.0.7
 - Minor plugin settings and display updates
 

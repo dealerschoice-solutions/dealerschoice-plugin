@@ -483,6 +483,7 @@ class InventorySync {
             'field_boat_length' => (string) $get_value($data->Length),
             'field_boat_length_inches' => convertLengthToInches($get_value($data->Length)),
             'field_boat_weight' => (string) $get_value($data->DryWeight),
+            'field_boat_beam' => $get_numeric($data->Beam ?? null, 3), // IMS stores beam as decimal feet
             'field_engine_hours' => $get_numeric($data->EngineHours, 1),
             'field_engine_make' => (string) $get_value($data->EngineMake),
             'field_engine_hp' => $get_value($data->EngineHP),

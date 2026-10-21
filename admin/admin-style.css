@@ -78,7 +78,8 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #ccc;
+    /* #8c8f94 (WP admin gray) keeps the off state at 3:1+ against white (WCAG 1.4.11). */
+    background-color: #8c8f94;
     -webkit-transition: .4s;
     transition: .4s;
     border-radius: 24px;
@@ -95,11 +96,24 @@
     transition: .4s;
     border-radius: 50%;
 }
+/* #008a20 (WP admin green) is 3:1+ against white; #46b450 was not. */
 .dc-switch input:checked + .dc-slider {
-    background-color: #46b450;
+    background-color: #008a20;
 }
-.dc-switch input:focus + .dc-slider {
-    box-shadow: 0 0 1px #46b450;
+/* Visible focus ring in the WP admin focus color (WCAG 2.4.7). */
+.dc-switch input:focus-visible + .dc-slider {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+.dc-switch-label {
+    cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+    .dc-slider,
+    .dc-slider:before {
+        -webkit-transition: none;
+        transition: none;
+    }
 }
 .dc-switch input:checked + .dc-slider:before {
     -webkit-transform: translateX(26px);

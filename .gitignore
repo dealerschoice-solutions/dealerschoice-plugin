@@ -29,3 +29,5 @@ composer.lock
 # Environment / local config
 .env
 .env.*
+settings.local.json
+.claude/*

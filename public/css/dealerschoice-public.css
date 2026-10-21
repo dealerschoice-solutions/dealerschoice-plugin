@@ -445,6 +445,28 @@ a.dc-button {
     margin-bottom: 20px;
 }
 
+/* Shop Other Locations (location-locked inventory pages) */
+.dealerschoice-other-locations {
+    margin-top: 40px;
+    border-top: 1px solid #ddd;
+    padding-top: 30px;
+    & h2 {
+        text-align: center;
+        margin-bottom: 10px;
+    }
+    & .dealerschoice-other-locations-intro {
+        text-align: center;
+        margin-bottom: 30px;
+        & p:last-child {
+            margin-bottom: 0;
+        }
+    }
+    & .dealerschoice-other-locations-more {
+        text-align: center;
+        margin-top: 20px;
+    }
+}
+
 /* ==========================================================================
    Location Selector Dialog
    ========================================================================== */

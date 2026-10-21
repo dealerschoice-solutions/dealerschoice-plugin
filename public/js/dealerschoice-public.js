@@ -382,6 +382,7 @@
                 '</div>'
             );
             this.updateInventoryPagination('');
+            this.updateOtherLocations('');
 
             // Make AJAX request
             $.ajax({
@@ -390,11 +391,17 @@
                 data: ajaxData,
                 success: (response) => {
                     if (response.success) {
+                        // Inserted before updateInventoryList() so its
+                        // dc:inventoryRendered event also covers these cards.
+                        this.updateOtherLocations(response.data.other_locations || '');
                         this.updateInventoryList(response.data.results);
                         this.updateInventoryPagination(response.data.pagination);
                         // Re-init favorite buttons in new content
                         if (window.DealersChoiceFavorites && typeof window.DealersChoiceFavorites.initFavoriteButtons === 'function') {
                             window.DealersChoiceFavorites.initFavoriteButtons('#inventory-results');
+                            if (response.data.other_locations) {
+                                window.DealersChoiceFavorites.initFavoriteButtons('.dealerschoice-other-locations-wrapper');
+                            }
                         }
                     } else {
                         this.updateInventoryList(
@@ -431,6 +438,14 @@
          */
         updateInventoryPagination(html) {
             $('.pagination-wrapper').html(html);
+        }
+
+        /**
+         * Update the "Shop Other Locations" block (location-locked pages only;
+         * the container is absent elsewhere, so this is a no-op there)
+         */
+        updateOtherLocations(html) {
+            $('.dealerschoice-other-locations-wrapper').html(html);
         }
 
         /**

@@ -1,26 +1,26 @@
 <?php
 /**
  * Boat Object Class
- * 
+ *
  * Object-oriented wrapper for boat post type that provides convenient methods
  * for accessing boat data, ACF fields, taxonomies, and metadata. This class
  * uses magic methods to dynamically access ACF fields with a clean API.
- * 
+ *
  * @package DealersChoice
  * @subpackage Classes
  * @since 1.0.0
- * 
+ *
  * Usage:
  *   $boat = new DC\Boat($post_id);
  *   echo $boat->getMake();     // Returns boat make
  *   echo $boat->getModel();    // Returns boat model
  *   echo $boat->getSalePrice(); // Returns formatted sale price
- * 
+ *
  * Magic Method Pattern:
  * - Methods starting with 'get' automatically map to ACF fields
  * - CamelCase is converted to snake_case with 'field_boat_' prefix
  * - Example: getStockNumber() → field_boat_stock_number
- * 
+ *
  * Special Methods:
  * - getPostID(): Returns WordPress post ID
  * - getName(): Returns post title
@@ -32,17 +32,17 @@
  * - getMainSpecs(): Returns array of main specifications
  * - getTechSpecs(): Returns array of technical specifications
  * - getPayment(): Returns array of payment information
- * 
+ *
  * Constructor Options:
  * - Accepts WP_Post object
  * - Accepts post ID (integer)
  * - Defaults to global $post if no argument provided
- * 
+ *
  * Meta Management:
  * - getMeta($key): Get post meta value
  * - setMeta($key, $value): Update post meta value
  * - getField($key): Get ACF field value
- * 
+ *
  * Dependencies:
  * - ACF (get_field function)
  * - WordPress taxonomy functions
@@ -132,13 +132,29 @@ class Boat {
     }
     // Take decimal length and convert to feet and inches format
     public function getFormattedLength(){
-        $length = $this->getLength();
-        if (!$length) {
+        return $this->formatFeetInches($this->getLength());
+    }
+
+    // Take decimal beam and convert to feet and inches format
+    public function getFormattedBeam(){
+        return $this->formatFeetInches($this->getBeam());
+    }
+
+    // Convert a decimal feet value (e.g. 8.5) to feet and inches (e.g. 8' 6")
+    private function formatFeetInches($value){
+        if (!is_numeric($value) || (float) $value <= 0) {
             return '';
         }
 
-        $feet = floor($length);
-        $inches = round(($length - $feet) * 12);
+        $value = (float) $value;
+        $feet = floor($value);
+        $inches = round(($value - $feet) * 12);
+
+        // Rounding up to 12 inches rolls over to the next foot
+        if ($inches >= 12) {
+            $feet++;
+            $inches = 0;
+        }
 
         return $feet . "'" . ($inches ? " " . $inches . '"' : '');
     }
@@ -169,6 +185,7 @@ class Boat {
         if($this->getModel()){$specs["Model"] = $this->getModel();}
         if($this->getHIN()){$specs["HIN"] = $this->getHIN();}
         if($this->getLength()){$specs["Model Length"] = $this->getFormattedLength();}
+        if($this->getFormattedBeam()){$specs["Beam"] = $this->getFormattedBeam();}
         if($this->getWeight()){$specs["Weight"] = $this->getWeight();}
         if($this->getType()){$specs["Type"] = $this->getType();}
         if($this->getMainColor()){$specs["Main Color"] = $this->getMainColor();}
@@ -250,7 +267,7 @@ class Boat {
         if($this->getField('boat_video4')){$videos[] = $this->getField('boat_video4');}
         return $videos;
     }
-    
+
     public function outputBoatSchema($boat){
         $schema = [
             "@context" => "https://schema.org",
