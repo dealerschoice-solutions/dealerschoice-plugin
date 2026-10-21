@@ -26,6 +26,11 @@
  * - dealers_choice_always_show_price: Toggle to always show price
  * - dealers_choice_reveal_price_scope: Whether revealing a price unlocks all prices on the page ('all') or only the clicked unit ('individual')
  * - dealers_choice_show_favorites: Toggle to show favorites
+ * - dealerschoice_show_other_locations: Toggle the "Shop Other Locations" block on location-locked inventory pages
+ * - dealerschoice_other_locations_heading: Heading for the "Shop Other Locations" block (required; blank = default)
+ * - dealerschoice_other_locations_intro: Optional intro text for the "Shop Other Locations" block, basic HTML allowed (saved blank = no intro; never saved = default)
+ * - dealerschoice_other_locations_show_button: Toggle the "View All" button in the "Shop Other Locations" block (default on)
+ * - dealerschoice_other_locations_button_text: Text for that button (blank = default)
  * - dealers_choice_show_finance_calculator: Toggle to show the quick finance calculator on single boat pages
  * - dealers_choice_finance_default_rate: Default APR (%) pre-filled in both finance calculators
  * - dealers_choice_finance_default_term: Default loan term (months) pre-filled in both finance calculators
@@ -157,6 +162,35 @@ function dealers_choice_process_settings_form() {
     $show_favorites = isset($_POST['dealers_choice_show_favorites']) ? '1' : '0';
     update_option('dealers_choice_show_favorites', $show_favorites);
 
+    // Multi-Location Inventory: Save 'Shop Other Locations' toggle
+    $show_other_locations = isset($_POST['dealerschoice_show_other_locations']) ? '1' : '0';
+    update_option('dealerschoice_show_other_locations', $show_other_locations);
+
+    // Multi-Location Inventory: Save heading and intro text. The heading is
+    // required, so blank falls back to the default; a blank intro is stored
+    // as '' and means "no intro".
+    $other_locations_heading = isset($_POST['dealerschoice_other_locations_heading']) ? sanitize_text_field(wp_unslash($_POST['dealerschoice_other_locations_heading'])) : '';
+    if ($other_locations_heading !== '') {
+        update_option('dealerschoice_other_locations_heading', $other_locations_heading);
+    } else {
+        delete_option('dealerschoice_other_locations_heading');
+    }
+
+    $other_locations_intro = isset($_POST['dealerschoice_other_locations_intro']) ? trim(wp_kses_post(wp_unslash($_POST['dealerschoice_other_locations_intro']))) : '';
+    update_option('dealerschoice_other_locations_intro', $other_locations_intro);
+
+    // Multi-Location Inventory: Save view-all button toggle and text. Blank
+    // text falls back to the default so the link always has a visible name.
+    $other_locations_show_button = isset($_POST['dealerschoice_other_locations_show_button']) ? '1' : '0';
+    update_option('dealerschoice_other_locations_show_button', $other_locations_show_button);
+
+    $other_locations_button_text = isset($_POST['dealerschoice_other_locations_button_text']) ? sanitize_text_field(wp_unslash($_POST['dealerschoice_other_locations_button_text'])) : '';
+    if ($other_locations_button_text !== '') {
+        update_option('dealerschoice_other_locations_button_text', $other_locations_button_text);
+    } else {
+        delete_option('dealerschoice_other_locations_button_text');
+    }
+
     // Finance Calculator: Save toggle for quick calculator on single boat pages
     $show_finance_calculator = isset($_POST['dealers_choice_show_finance_calculator']) ? '1' : '0';
     update_option('dealers_choice_show_finance_calculator', $show_finance_calculator);
@@ -280,7 +314,7 @@ function dealers_choice_settings_enqueue_assets($hook) {
             'dealers-choice-admin-style',
             plugin_dir_url(__FILE__) . 'admin-style.css',
             [],
-            '1.0.0'
+            defined('DC_VERSION') ? DC_VERSION : '1.0.0'
         );
         
         // Enqueue admin scripts
@@ -288,7 +322,7 @@ function dealers_choice_settings_enqueue_assets($hook) {
             'dealers-choice-admin-script',
             plugin_dir_url(__FILE__) . 'admin-scripts.js',
             ['jquery'],
-            '1.0.0',
+            defined('DC_VERSION') ? DC_VERSION : '1.0.0',
             true
         );
     }
@@ -324,6 +358,11 @@ function dealers_choice_settings_page() {
     $always_show_price = get_option('dealers_choice_always_show_price', '1');
     $reveal_price_scope = get_option('dealers_choice_reveal_price_scope', 'all');
     $show_favorites = get_option('dealers_choice_show_favorites', '1');
+    $show_other_locations = get_option('dealerschoice_show_other_locations', '0');
+    $other_locations_heading = \DC\AJAX_Handlers::get_other_locations_heading();
+    $other_locations_intro = \DC\AJAX_Handlers::get_other_locations_intro();
+    $other_locations_show_button = get_option('dealerschoice_other_locations_show_button', '1');
+    $other_locations_button_text = \DC\AJAX_Handlers::get_other_locations_button_text();
     $show_finance_calculator = get_option('dealers_choice_show_finance_calculator', '0');
     $finance_default_rate = get_option('dealers_choice_finance_default_rate', 7.99);
     $finance_default_term = get_option('dealers_choice_finance_default_term', 240);
@@ -378,11 +417,66 @@ function dealers_choice_settings_page() {
                         <th scope="row"><?php _e('Show Favorites', 'dealers-choice'); ?></th>
                         <td>
                             <label class="dc-switch">
-                                <input type="checkbox" id="dealers_choice_show_favorites" name="dealers_choice_show_favorites" value="1" <?php checked($show_favorites, '1'); ?> />
+                                <input type="checkbox" id="dealers_choice_show_favorites" name="dealers_choice_show_favorites" value="1" aria-labelledby="dealers_choice_show_favorites_label" aria-describedby="dealers_choice_show_favorites_description" <?php checked($show_favorites, '1'); ?> />
                                 <span class="dc-slider"></span>
                             </label>
-                            <span class="dc-switch-label"><?php _e('Show favorites button on inventory items', 'dealers-choice'); ?></span>
-                            <p class="description"><?php _e('If checked, the favorites button will be displayed on inventory items.', 'dealers-choice'); ?></p>
+                            <label for="dealers_choice_show_favorites" class="dc-switch-label" id="dealers_choice_show_favorites_label"><?php _e('Show favorites button on inventory items', 'dealers-choice'); ?></label>
+                            <p class="description" id="dealers_choice_show_favorites_description"><?php _e('If checked, the favorites button will be displayed on inventory items.', 'dealers-choice'); ?></p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="dc-settings-group">
+                <h3><?php esc_html_e('Multi-Location Inventory', 'dealerschoice'); ?></h3>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><?php esc_html_e('Shop Other Locations', 'dealerschoice'); ?></th>
+                        <td>
+                            <label class="dc-switch">
+                                <input type="checkbox" id="dealerschoice_show_other_locations" name="dealerschoice_show_other_locations" value="1" aria-labelledby="dealerschoice_show_other_locations_label" aria-describedby="dealerschoice_show_other_locations_description" <?php checked($show_other_locations, '1'); ?> />
+                                <span class="dc-slider"></span>
+                            </label>
+                            <label for="dealerschoice_show_other_locations" class="dc-switch-label" id="dealerschoice_show_other_locations_label"><?php esc_html_e('Show matching boats from other locations on location inventory pages', 'dealerschoice'); ?></label>
+                            <p class="description" id="dealerschoice_show_other_locations_description"><?php esc_html_e('On inventory pages locked to a location (the shortcode\'s location attribute), shows up to 3 boats from other locations that match the visitor\'s filters or search, below the last page of results.', 'dealerschoice'); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="other-locations-heading-row">
+                        <th scope="row">
+                            <label for="dealerschoice_other_locations_heading"><?php esc_html_e('Shop Other Locations Heading', 'dealerschoice'); ?> <span aria-hidden="true">*</span></label>
+                        </th>
+                        <td>
+                            <input type="text" id="dealerschoice_other_locations_heading" name="dealerschoice_other_locations_heading" value="<?php echo esc_attr($other_locations_heading); ?>" class="regular-text" required aria-describedby="dealerschoice_other_locations_heading_description" />
+                            <p class="description" id="dealerschoice_other_locations_heading_description"><?php echo esc_html(sprintf(__('Required. Heading shown above the other-location boats; it also labels that section for screen readers. Default: "%s"', 'dealerschoice'), \DC\AJAX_Handlers::get_default_other_locations_heading())); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="other-locations-intro-row">
+                        <th scope="row">
+                            <label for="dealerschoice_other_locations_intro"><?php esc_html_e('Shop Other Locations Intro', 'dealerschoice'); ?></label>
+                        </th>
+                        <td>
+                            <textarea id="dealerschoice_other_locations_intro" name="dealerschoice_other_locations_intro" class="large-text" rows="3" aria-describedby="dealerschoice_other_locations_intro_description"><?php echo esc_textarea($other_locations_intro); ?></textarea>
+                            <p class="description" id="dealerschoice_other_locations_intro_description"><?php echo esc_html(sprintf(__('Optional. Text shown below the heading; basic HTML such as links and bold is allowed. Leave blank to show no intro. Default: "%s"', 'dealerschoice'), \DC\AJAX_Handlers::get_default_other_locations_intro())); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="other-locations-show-button-row">
+                        <th scope="row"><?php esc_html_e('Show View All Button', 'dealerschoice'); ?></th>
+                        <td>
+                            <label class="dc-switch">
+                                <input type="checkbox" id="dealerschoice_other_locations_show_button" name="dealerschoice_other_locations_show_button" value="1" aria-labelledby="dealerschoice_other_locations_show_button_label" aria-describedby="dealerschoice_other_locations_show_button_description" <?php checked($other_locations_show_button, '1'); ?> />
+                                <span class="dc-slider"></span>
+                            </label>
+                            <label for="dealerschoice_other_locations_show_button" class="dc-switch-label" id="dealerschoice_other_locations_show_button_label"><?php esc_html_e('Show a button linking to all matching boats at every location', 'dealerschoice'); ?></label>
+                            <p class="description" id="dealerschoice_other_locations_show_button_description"><?php esc_html_e('Links to the main inventory page with the visitor\'s filters and search already applied.', 'dealerschoice'); ?></p>
+                        </td>
+                    </tr>
+                    <tr id="other-locations-button-text-row">
+                        <th scope="row">
+                            <label for="dealerschoice_other_locations_button_text"><?php esc_html_e('View All Button Text', 'dealerschoice'); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" id="dealerschoice_other_locations_button_text" name="dealerschoice_other_locations_button_text" value="<?php echo esc_attr($other_locations_button_text); ?>" class="regular-text" aria-describedby="dealerschoice_other_locations_button_text_description" />
+                            <p class="description" id="dealerschoice_other_locations_button_text_description"><?php echo esc_html(sprintf(__('Text on the view-all button. Leave blank to use the default: "%s"', 'dealerschoice'), \DC\AJAX_Handlers::get_default_other_locations_button_text())); ?></p>
                         </td>
                     </tr>
                 </table>
@@ -395,11 +489,11 @@ function dealers_choice_settings_page() {
                         <th scope="row"><?php _e('Show Finance Calculator', 'dealers-choice'); ?></th>
                         <td>
                             <label class="dc-switch">
-                                <input type="checkbox" id="dealers_choice_show_finance_calculator" name="dealers_choice_show_finance_calculator" value="1" <?php checked($show_finance_calculator, '1'); ?> />
+                                <input type="checkbox" id="dealers_choice_show_finance_calculator" name="dealers_choice_show_finance_calculator" value="1" aria-labelledby="dealers_choice_show_finance_calculator_label" aria-describedby="dealers_choice_show_finance_calculator_description" <?php checked($show_finance_calculator, '1'); ?> />
                                 <span class="dc-slider"></span>
                             </label>
-                            <span class="dc-switch-label"><?php _e('Show quick finance calculator on single boat pages', 'dealers-choice'); ?></span>
-                            <p class="description"><?php _e('Only displays when the boat has a visible price and does not already have dealer-supplied financing data from the inventory feed.', 'dealers-choice'); ?></p>
+                            <label for="dealers_choice_show_finance_calculator" class="dc-switch-label" id="dealers_choice_show_finance_calculator_label"><?php _e('Show quick finance calculator on single boat pages', 'dealers-choice'); ?></label>
+                            <p class="description" id="dealers_choice_show_finance_calculator_description"><?php _e('Only displays when the boat has a visible price and does not already have dealer-supplied financing data from the inventory feed.', 'dealers-choice'); ?></p>
                         </td>
                     </tr>
                     <tr id="finance-default-rate-row">
@@ -469,11 +563,11 @@ function dealers_choice_settings_page() {
                         <th scope="row"><?php _e('Always Show Price', 'dealers-choice'); ?></th>
                         <td>
                             <label class="dc-switch">
-                                <input type="checkbox" id="dealers_choice_always_show_price" name="dealers_choice_always_show_price" value="1" <?php checked($always_show_price, '1'); ?> />
+                                <input type="checkbox" id="dealers_choice_always_show_price" name="dealers_choice_always_show_price" value="1" aria-labelledby="dealers_choice_always_show_price_label" aria-describedby="dealers_choice_always_show_price_description" <?php checked($always_show_price, '1'); ?> />
                                 <span class="dc-slider"></span>
                             </label>
-                            <span class="dc-switch-label"><?php _e('Show price on all inventory items', 'dealers-choice'); ?></span>
-                            <p class="description"><?php _e('If unchecked, a Reveal Price form can be shown instead of the price.', 'dealers-choice'); ?></p>
+                            <label for="dealers_choice_always_show_price" class="dc-switch-label" id="dealers_choice_always_show_price_label"><?php _e('Show price on all inventory items', 'dealers-choice'); ?></label>
+                            <p class="description" id="dealers_choice_always_show_price_description"><?php _e('If unchecked, a Reveal Price form can be shown instead of the price.', 'dealers-choice'); ?></p>
                         </td>
                     </tr>
                     <tr id="reveal-price-scope-row">

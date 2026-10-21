@@ -54,6 +54,10 @@
  */
 namespace DC;
 
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 class Inventory {
 
     static public function getTotalInventory($filters = []){
@@ -276,7 +280,12 @@ class Inventory {
         $tax_joins = '';
         $join_counter = 1;
         $join_params = [];
-        
+
+        // The taxonomy name is interpolated into the SQL below (it can't be a
+        // placeholder in that position as written), so every taxArg must pass
+        // the allowlist in sanitizeTaxArgs() first. Never remove this call.
+        $taxArgs = self::sanitizeTaxArgs($taxArgs);
+
         if (!empty($taxArgs)) {
             foreach ($taxArgs as $tArg) {
                 $alias = 'tr' . $join_counter;
@@ -348,5 +357,79 @@ class Inventory {
             'terms' => $terms_with_counts,
             'total' => $total
         ];
+    }
+
+    /**
+     * Drop or clean any taxArg that isn't safe to put in the counts query.
+     *
+     * - 'taxonomy' must be a registered taxonomy attached to the boat post
+     *   type (it is interpolated into SQL, so this is the injection guard)
+     * - 'field' must be 'slug' or 'term_id'
+     * - slugs go through sanitize_title(), term IDs through absint(); nested
+     *   arrays and empty values are dropped
+     * - a taxArg left with no terms is dropped entirely, since an empty
+     *   IN () is a SQL error
+     *
+     * @param array $taxArgs Untrusted tax args.
+     * @return array Safe tax args.
+     */
+    static private function sanitizeTaxArgs($taxArgs) {
+        $clean = [];
+
+        if (!is_array($taxArgs)) {
+            return $clean;
+        }
+
+        foreach ($taxArgs as $tArg) {
+            if (!is_array($tArg) || !isset($tArg['taxonomy']) || !is_string($tArg['taxonomy'])) {
+                continue;
+            }
+
+            $taxonomy = $tArg['taxonomy'];
+
+            if (!taxonomy_exists($taxonomy) || !is_object_in_taxonomy('boat', $taxonomy)) {
+                continue;
+            }
+
+            $field = isset($tArg['field']) ? $tArg['field'] : 'term_id';
+
+            if (!in_array($field, ['slug', 'term_id'], true)) {
+                continue;
+            }
+
+            $raw_terms = isset($tArg['terms']) ? $tArg['terms'] : [];
+            $raw_terms = is_array($raw_terms) ? $raw_terms : [$raw_terms];
+            $terms     = [];
+
+            foreach ($raw_terms as $term) {
+                if (is_array($term) || is_object($term)) {
+                    continue;
+                }
+
+                if ($field === 'slug') {
+                    $slug = sanitize_title((string) $term);
+                    if ($slug !== '' && $slug !== 'all') {
+                        $terms[] = $slug;
+                    }
+                } else {
+                    $term_id = absint($term);
+                    if ($term_id > 0) {
+                        $terms[] = $term_id;
+                    }
+                }
+            }
+
+            if (empty($terms)) {
+                continue;
+            }
+
+            $tArg['taxonomy'] = $taxonomy;
+            $tArg['field']    = $field;
+            $tArg['terms']    = array_values(array_unique($terms));
+
+            $clean[] = $tArg;
+        }
+
+        return $clean;
     }
 }

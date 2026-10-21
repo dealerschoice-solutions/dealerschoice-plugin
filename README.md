@@ -281,6 +281,10 @@ This plugin is distributed in the hope that it will be useful, but WITHOUT ANY W
 While the plugin software is GPL-licensed, access to our premium services, API endpoints, updates, and support requires a separate paid subscription governed by our [Terms of Service](https://www.dealerschoicesolutions.com/terms-of-use/).
 
 ## Changelog
+### 1.0.8.1
+- Minor plugin security fixes
+- Added a "Shop Other Locations" setting. When a multi-location marina filters by location, they can enable a "Shop Other Locations" block that shows up after the current location's inventory with similar boats available at their other locations.
+
 ### 1.0.8
 - Minor plugin settings and display updates
 - Fix: Reveal Price system now tracks displayed price in form submission

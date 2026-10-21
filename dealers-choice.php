@@ -3,7 +3,7 @@
  * Plugin Name: DealersChoice Solutions
  * Plugin URI: https://www.dealerschoicesolutions.com
  * Description: A comprehensive dealership inventory management plugin that syncs boat listings from your DMS to WordPress with automatic categorization, image management, and advanced filtering.
- * Version: 1.0.8
+ * Version: 1.0.8.1.1
  * Author: DealersChoice, by Mannix Marketing
  * Author URI: https://www.dealerschoicesolutions.com
  * License: GPL2
@@ -212,7 +212,7 @@ function dealers_choice_acf_admin_notice() {
 // Define plugin constants
 define('DC_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('DC_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('DC_VERSION', '1.0.8');
+define('DC_VERSION', '1.0.8.1');
 
 // Plugin Update Checker — polls DealersChoice PUC Server for releases and triggers updates in WP Admin.
 require_once DC_PLUGIN_DIR . 'lib/plugin-update-checker/load-v5p7.php';
@@ -1119,6 +1119,18 @@ function addACFFieldGroupForBoats() {
                         'name' => 'boat_weight',
                         'type' => 'text',
                         'instructions' => 'Numbers Only, no symbols or commas',
+                        'required' => 0,
+                        'wrapper' => array(
+                            'width' => '33%',
+                            'class' => 'acf-responsive-field',
+                        ),
+                    ),
+                    array(
+                        'key' => 'field_boat_beam',
+                        'label' => 'Beam',
+                        'name' => 'boat_beam',
+                        'type' => 'text',
+                        'instructions' => 'Decimal feet, numbers only (e.g. 8.5 for 8\' 6")',
                         'required' => 0,
                         'wrapper' => array(
                             'width' => '33%',

@@ -51,6 +51,11 @@
  * Link to the page with a URL parameter instead (?condition=new), which
  * pre-checks the filter while leaving the widget visible and adjustable.
  *
+ * Shop Other Locations: when 'location' is set and the "Shop Other Locations"
+ * setting (dealerschoice_show_other_locations) is on, a visitor who filters or
+ * searches sees up to 3 exact matches from the other locations below the last
+ * page of results. See AJAX_Handlers::get_other_locations_html().
+ *
  * [dealerschoice_slider]
  * Displays a horizontal slider/carousel of boats
  * Attributes:
@@ -514,6 +519,11 @@ class Shortcodes {
 
                         <!-- Pagination Container -->
                         <div class="pagination-wrapper"></div>
+
+                        <?php if (isset($locked['location'])): ?>
+                        <!-- Shop Other Locations Container (filled by AJAX on the last page of filtered results) -->
+                        <div class="dealerschoice-other-locations-wrapper"></div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>

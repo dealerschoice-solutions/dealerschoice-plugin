@@ -242,15 +242,14 @@ class AJAX_Handlers {
      * to return matching boats.
      */
     public static function search_inventory() {
-        // Make sure we allow cross-origin requests
-        $origin = get_http_origin();
-        
-        // Optional: You can restrict this strictly to domains, or use '*' to allow all 
-        // (since it's just public inventory data, '*' is usually safe and fixes other iframe embeds too)
+        // Allow cross-origin requests. This is public, read-only inventory
+        // data, so '*' is acceptable and keeps iframe/third-party embeds
+        // working. Credentials are deliberately NOT allowed: browsers reject
+        // 'Allow-Credentials: true' with a '*' origin anyway, and nothing here
+        // needs the visitor's cookies or an Authorization header.
         header('Access-Control-Allow-Origin: *');
-        header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-        header('Access-Control-Allow-Credentials: true');
-        header('Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With');
+        header('Access-Control-Allow-Methods: POST, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type, X-Requested-With');
 
         // Handle preflight OPTIONS request from the browser
         if ('OPTIONS' == $_SERVER['REQUEST_METHOD']) {
@@ -259,13 +258,22 @@ class AJAX_Handlers {
         }
 
         // Get filter data from AJAX request
-        $filters = isset($_POST['filters']) ? $_POST['filters'] : [];
-        $sort_by = isset($_POST['sortBy']) ? sanitize_text_field($_POST['sortBy']) : get_option('dealers_choice_default_sort', 'date-desc');
-        $search_query = isset($_POST['query']) ? sanitize_text_field($_POST['query']) : '';
-        $current_page = isset($_POST['currentPage']) ? absint($_POST['currentPage']) : 1;
+        // Allowlisted keys and sanitized slugs/IDs only; see sanitize_filters().
+        $filters = self::sanitize_filters(isset($_POST['filters']) ? $_POST['filters'] : []);
+        $sort_by = isset($_POST['sortBy']) ? sanitize_text_field(wp_unslash($_POST['sortBy'])) : get_option('dealers_choice_default_sort', 'date-desc');
+        $search_query = isset($_POST['query']) ? sanitize_text_field(wp_unslash($_POST['query'])) : '';
+        // Keyword search runs several LIKE '%...%' clauses; an unbounded
+        // string only makes that slower.
+        $search_query = mb_substr($search_query, 0, 100);
+        $current_page = isset($_POST['currentPage']) ? max(1, absint($_POST['currentPage'])) : 1;
         $posts_per_page = isset($_POST['postsPerPage']) && absint($_POST['postsPerPage']) > 0
             ? absint($_POST['postsPerPage'])
             : apply_filters('dealerschoice_posts_per_page', 12);
+
+        // Cap page size so a single public request can't render the whole
+        // inventory. Raise via the filter if a site genuinely needs more.
+        $max_posts_per_page = max(1, (int) apply_filters('dealerschoice_max_posts_per_page', 60));
+        $posts_per_page = min($posts_per_page, $max_posts_per_page);
 
         // Locked taxonomy constraints declared by the shortcode (see the
         // 'lock' attribute on [dealerschoice_inventory]). These are kept
@@ -302,11 +310,29 @@ class AJAX_Handlers {
         
         // Build pagination HTML
         $pagination_html = self::build_pagination($query, $current_page);
-        
+
+        // "Shop Other Locations": on a location-locked page, once the visitor
+        // has filtered or searched and reached the last page of local results,
+        // offer matching boats from the dealer's other locations. Returned
+        // separately from 'results' so the JS can render it below pagination.
+        // Zero local results are left to the existing suggestions block.
+        $other_locations_html = '';
+        if (
+            get_option('dealerschoice_show_other_locations', '0') === '1'
+            && !empty($locked['location'])
+            && empty($filters['id'])
+            && $query->found_posts > 0
+            && $current_page >= $query->max_num_pages
+            && (self::has_active_filters($filters) || $search_query !== '')
+        ) {
+            $other_locations_html = self::get_other_locations_html($filters, $search_query, $sort_by, $locked);
+        }
+
         // Return JSON response
         wp_send_json_success([
             'results' => $results_html,
             'pagination' => $pagination_html,
+            'other_locations' => $other_locations_html,
             'total' => $query->found_posts,
             'pages' => $query->max_num_pages
         ]);
@@ -443,19 +469,8 @@ class AJAX_Handlers {
      * @return string No results HTML
      */
     private static function get_no_results_html($search_query, $filters) {
-        $has_filters = false;
-        foreach ($filters as $filter) {
-            if (!empty($filter) && is_array($filter)) {
-                $filter_values = array_filter($filter, function($val) {
-                    return $val !== 'all';
-                });
-                if (!empty($filter_values)) {
-                    $has_filters = true;
-                    break;
-                }
-            }
-        }
-        
+        $has_filters = self::has_active_filters($filters);
+
         $html = '<div class="no-results">';
         $html .= '<h2>No Boats Found</h2>';
         
@@ -467,18 +482,307 @@ class AJAX_Handlers {
         }
         
         $html .= '</div>';
-        
+
         return $html;
     }
-    
+
+    /**
+     * Does the visitor have at least one real filter selected?
+     *
+     * 'all' placeholder values don't count. Locked constraints are not part
+     * of $filters (the JS strips them), so a scoped page with nothing chosen
+     * by the visitor returns false.
+     *
+     * @param array $filters Current filters
+     * @return bool
+     */
+    private static function has_active_filters($filters) {
+        if (!is_array($filters)) {
+            return false;
+        }
+
+        foreach ($filters as $filter) {
+            if (!empty($filter) && is_array($filter)) {
+                $filter_values = array_filter($filter, function($val) {
+                    return $val !== 'all';
+                });
+                if (!empty($filter_values)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Build the "Shop Other Locations" block.
+     *
+     * Runs the visitor's exact filters and search against every location
+     * except the locked one(s), keeping any other locked constraints (so a
+     * page locked to location + condition="new" still only suggests new
+     * boats). No relaxation: if nothing matches exactly, nothing renders.
+     *
+     * @param array  $filters      Visitor filter selections
+     * @param string $search_query Search keyword
+     * @param string $sort_by      Current sort order
+     * @param array  $locked       Sanitised locked constraints, must include 'location'
+     * @return string HTML content, or '' when there are no matches
+     */
+    private static function get_other_locations_html($filters, $search_query, $sort_by, $locked) {
+        $excluded_locations = $locked['location'];
+
+        $other_locked = $locked;
+        unset($other_locked['location']);
+
+        // Any visitor-chosen location would AND against the exclusion below
+        // and could only ever narrow to zero, so drop it.
+        $other_filters = is_array($filters) ? $filters : [];
+        unset($other_filters['location']);
+
+        $limit = 3;
+        $args  = self::build_inventory_query_args($other_filters, $search_query, $sort_by, 1, $limit, $other_locked);
+
+        if (empty($args['tax_query'])) {
+            $args['tax_query'] = ['relation' => 'AND'];
+        }
+
+        $args['tax_query'][] = [
+            'taxonomy' => 'location',
+            'field'    => 'slug',
+            'terms'    => $excluded_locations,
+            'operator' => 'NOT IN',
+        ];
+        $args['no_found_rows'] = true;
+
+        $query = new \WP_Query($args);
+
+        if (!$query->have_posts()) {
+            return '';
+        }
+
+        $view_all_url = get_option('dealerschoice_other_locations_show_button', '1') === '1'
+            ? self::get_other_locations_view_all_url($other_filters, $search_query)
+            : '';
+
+        ob_start();
+        ?>
+        <section class="dealerschoice-other-locations" aria-labelledby="dc-other-locations-heading">
+            <h2 id="dc-other-locations-heading"><?php echo esc_html(self::get_other_locations_heading()); ?></h2>
+            <?php $intro = self::get_other_locations_intro(); ?>
+            <?php if ($intro !== ''): ?>
+            <div class="dealerschoice-other-locations-intro"><?php echo wp_kses_post(wpautop($intro)); ?></div>
+            <?php endif; ?>
+            <div class="suggestions-grid">
+                <?php while ($query->have_posts()): $query->the_post(); ?>
+                    <?php echo Template_Loader::get_template('inventory-block.php', [], true); ?>
+                <?php endwhile; ?>
+            </div>
+            <?php if ($view_all_url !== ''): ?>
+            <p class="dealerschoice-other-locations-more">
+                <a href="<?php echo esc_url($view_all_url); ?>" class="dc-button"><?php echo esc_html(self::get_other_locations_button_text()); ?></a>
+            </p>
+            <?php endif; ?>
+        </section>
+        <?php
+        wp_reset_postdata();
+        return ob_get_clean();
+    }
+
+    /**
+     * "Shop Other Locations" heading from Settings, falling back to
+     * get_default_other_locations_heading() when the dealer hasn't set one.
+     *
+     * @return string Plain text - escape with esc_html() on output.
+     */
+    public static function get_other_locations_heading() {
+        $heading = (string) get_option('dealerschoice_other_locations_heading', '');
+
+        return $heading !== '' ? $heading : self::get_default_other_locations_heading();
+    }
+
+    /**
+     * "Shop Other Locations" intro text from Settings.
+     *
+     * Unlike the heading, the intro is optional: the default is used only
+     * until Settings is first saved, after which a blank value is stored and
+     * the intro is not output at all.
+     *
+     * @return string May contain basic HTML (saved via wp_kses_post) - escape
+     *                on output with wp_kses_post(), not esc_html(). '' means
+     *                "no intro".
+     */
+    public static function get_other_locations_intro() {
+        return trim((string) get_option('dealerschoice_other_locations_intro', self::get_default_other_locations_intro()));
+    }
+
+    /**
+     * "Shop Other Locations" view-all button text from Settings, falling back
+     * to get_default_other_locations_button_text() when blank. Never empty,
+     * because it is the link's accessible name.
+     *
+     * @return string Plain text - escape with esc_html() on output.
+     */
+    public static function get_other_locations_button_text() {
+        $text = (string) get_option('dealerschoice_other_locations_button_text', '');
+
+        return $text !== '' ? $text : self::get_default_other_locations_button_text();
+    }
+
+    /**
+     * Default text for the "Shop Other Locations" view-all button. Also used
+     * by the admin settings page so the default copy only lives in one place.
+     *
+     * @return string
+     */
+    public static function get_default_other_locations_button_text() {
+        return __('View All Matching Boats at Every Location', 'dealerschoice');
+    }
+
+    /**
+     * Default heading for the "Shop Other Locations" block. Also used by the
+     * admin settings page so the default copy only lives in one place. The
+     * heading is required (it labels the block's <section> for assistive
+     * tech), so a blank setting always falls back to this.
+     *
+     * @return string
+     */
+    public static function get_default_other_locations_heading() {
+        return __('Shop Other Locations', 'dealerschoice');
+    }
+
+    /**
+     * Default intro text for the "Shop Other Locations" block, shown until
+     * the dealer saves Settings. Also used by the admin settings page so the
+     * default copy only lives in one place.
+     *
+     * @return string
+     */
+    public static function get_default_other_locations_intro() {
+        return __('These boats matching your search are available at our other locations.', 'dealerschoice');
+    }
+
+    /**
+     * Link to the site-wide inventory page with the visitor's filters preset.
+     *
+     * Uses the URL parameters the inventory JS reads on load (key[]=slug, and
+     * boat_year for year since ?year= is a WordPress reserved query var).
+     * Keys are allowlisted against the filter map and every value is forced
+     * through sanitize_title(). Capacity has no URL parameter and is skipped.
+     *
+     * @param array  $filters      Visitor filter selections (location already removed)
+     * @param string $search_query Search keyword
+     * @return string URL, or '' when no inventory page URL can be resolved
+     */
+    private static function get_other_locations_view_all_url($filters, $search_query) {
+        if (!function_exists('dealers_choice_get_inventory_page_url')) {
+            return '';
+        }
+
+        $base = dealers_choice_get_inventory_page_url();
+        if ($base === '') {
+            return '';
+        }
+
+        $url_keys = [
+            'condition'  => 'condition',
+            'status'     => 'status',
+            'category'   => 'category',
+            'make'       => 'make',
+            'model'      => 'model',
+            'price'      => 'price',
+            'length'     => 'length',
+            'horsepower' => 'horsepower',
+            'year'       => 'boat_year',
+        ];
+
+        $filter_map = self::get_filter_taxonomy_map();
+        $params     = [];
+
+        foreach ($url_keys as $filter_key => $param) {
+            if (!isset($filter_map[$filter_key]) || empty($filters[$filter_key]) || !is_array($filters[$filter_key])) {
+                continue;
+            }
+
+            $values = [];
+            foreach ($filters[$filter_key] as $value) {
+                if (is_array($value)) {
+                    continue;
+                }
+                $slug = sanitize_title(wp_unslash((string) $value));
+                if ($slug !== '' && $slug !== 'all') {
+                    $values[] = $slug;
+                }
+            }
+
+            if (!empty($values)) {
+                $params[$param] = array_values(array_unique($values));
+            }
+        }
+
+        if ($search_query !== '') {
+            $params['q'] = $search_query;
+        }
+
+        // http_build_query() emits key[0]=a&key[1]=b; the JS only matches
+        // key[] or key, so build the array params by hand.
+        $query_parts = [];
+        foreach ($params as $param => $value) {
+            if (is_array($value)) {
+                foreach ($value as $slug) {
+                    $query_parts[] = rawurlencode($param . '[]') . '=' . rawurlencode($slug);
+                }
+            } else {
+                $query_parts[] = rawurlencode($param) . '=' . rawurlencode($value);
+            }
+        }
+
+        if (empty($query_parts)) {
+            return $base;
+        }
+
+        return $base . (strpos($base, '?') === false ? '?' : '&') . implode('&', $query_parts);
+    }
+
     /**
      * Get updated filter counts based on current selections
      * 
      * This allows dynamic updating of filter counts as user selects/deselects filters
      */
     public static function get_filter_counts() {
-        $filters = isset($_POST['filters']) ? $_POST['filters'] : [];
-        
+        // Public and unauthenticated. DC\Inventory expects keys that are
+        // taxonomy names (not the AJAX filter keys), so allowlist against the
+        // taxonomies the sidebar can filter by and sanitize every slug.
+        // DC\Inventory::sanitizeTaxArgs() re-validates before any SQL runs.
+        $raw_filters        = isset($_POST['filters']) && is_array($_POST['filters']) ? wp_unslash($_POST['filters']) : [];
+        $allowed_taxonomies = array_values(self::get_filter_taxonomy_map());
+        $filters            = [];
+
+        foreach ($raw_filters as $taxonomy => $values) {
+            $taxonomy = sanitize_key($taxonomy);
+
+            if (!in_array($taxonomy, $allowed_taxonomies, true)) {
+                continue;
+            }
+
+            $values = is_array($values) ? $values : [$values];
+            $slugs  = [];
+
+            foreach ($values as $value) {
+                if (is_array($value)) {
+                    continue;
+                }
+                $slug = sanitize_title((string) $value);
+                if ($slug !== '' && $slug !== 'all') {
+                    $slugs[] = $slug;
+                }
+            }
+
+            if (!empty($slugs)) {
+                $filters[$taxonomy] = array_values(array_unique($slugs));
+            }
+        }
+
         // Get updated counts
         $counts = [
             'locations' => \DC\Inventory::getTaxonomyValuesForLocation($filters),
@@ -682,6 +986,84 @@ class AJAX_Handlers {
                 }
 
                 $terms[] = $slug;
+            }
+
+            if (!empty($terms)) {
+                $clean[$filter_key] = array_values(array_unique($terms));
+            }
+        }
+
+        return $clean;
+    }
+
+    /**
+     * Validate the visitor's untrusted filter selections.
+     *
+     * Same idea as sanitize_locked_constraints(), but for the changeable
+     * sidebar filters:
+     *
+     * - keys must exist in get_filter_taxonomy_map() (promotions and other
+     *   lock-only taxonomies are not visitor filters), plus 'id' for the
+     *   favorites request
+     * - every slug is forced through sanitize_title(); nested arrays dropped
+     * - 'id' values go through absint() and are capped at
+     *   'dealerschoice_max_favorite_ids' (default 100)
+     *
+     * 'all' is kept as-is because build_inventory_query_args() and
+     * has_active_filters() already treat it as "no selection".
+     *
+     * @param mixed $raw Untrusted input.
+     * @return array<string,array<int,string|int>> Sanitised filters.
+     */
+    public static function sanitize_filters($raw) {
+        $clean = [];
+
+        if (!is_array($raw)) {
+            return $clean;
+        }
+
+        $map = self::get_filter_taxonomy_map();
+
+        foreach ($raw as $filter_key => $values) {
+            $filter_key = sanitize_key($filter_key);
+            $values     = is_array($values) ? $values : [$values];
+
+            if ($filter_key === 'id') {
+                $ids = [];
+                foreach ($values as $value) {
+                    if (is_array($value)) {
+                        continue;
+                    }
+                    $id = absint($value);
+                    if ($id > 0) {
+                        $ids[] = $id;
+                    }
+                }
+
+                $max_ids = max(1, (int) apply_filters('dealerschoice_max_favorite_ids', 100));
+                $ids     = array_slice(array_values(array_unique($ids)), 0, $max_ids);
+
+                if (!empty($ids)) {
+                    $clean['id'] = $ids;
+                }
+                continue;
+            }
+
+            if (!isset($map[$filter_key])) {
+                continue;
+            }
+
+            $terms = [];
+            foreach ($values as $value) {
+                if (is_array($value)) {
+                    continue;
+                }
+
+                $slug = sanitize_title(wp_unslash((string) $value));
+
+                if ($slug !== '') {
+                    $terms[] = $slug;
+                }
             }
 
             if (!empty($terms)) {
