@@ -1,15 +1,10 @@
 /**
- * Admin Styles for DealersChoice Plugin
- * 
- * Styles for admin interface pages including sync status indicators,
- * log level colors, and general admin UI enhancements.
- * 
+ * DealersChoice admin styles: sync status, log levels, toggle switches and settings groups.
+ *
  * @package DealersChoice
- * @subpackage Admin
- * @since 1.0.0
  */
 
-/* Sync Status Indicators */
+/* Sync status */
 #sync-status.loading {
     padding: 15px;
     background: #fff;
@@ -28,7 +23,7 @@
     border-left: 4px solid #dc3232;
 }
 
-/* Log Level Colors */
+/* Log level colors */
 .error {
     color: #dc3232;
     font-weight: bold;
@@ -44,7 +39,7 @@
     font-weight: bold;
 }
 
-/* Rotation Animation for Loading Icons */
+/* Loading icon rotation */
 @keyframes rotation {
     from {
         transform: rotate(0deg);
@@ -58,7 +53,7 @@
     animation: rotation 2s infinite linear;
 }
 
-/* Toggle Switch for Always Show Price */
+/* Toggle switch */
 .dc-switch {
     position: relative;
     display: inline-block;
@@ -78,7 +73,6 @@
     left: 0;
     right: 0;
     bottom: 0;
-    /* #8c8f94 (WP admin gray) keeps the off state at 3:1+ against white (WCAG 1.4.11). */
     background-color: #8c8f94;
     -webkit-transition: .4s;
     transition: .4s;
@@ -96,11 +90,10 @@
     transition: .4s;
     border-radius: 50%;
 }
-/* #008a20 (WP admin green) is 3:1+ against white; #46b450 was not. */
 .dc-switch input:checked + .dc-slider {
     background-color: #008a20;
 }
-/* Visible focus ring in the WP admin focus color (WCAG 2.4.7). */
+/* Focus ring */
 .dc-switch input:focus-visible + .dc-slider {
     outline: 2px solid #2271b1;
     outline-offset: 2px;
@@ -125,7 +118,7 @@
     vertical-align: middle;
 }
 
-/* Settings Page - Grouped Setting Cards */
+/* Settings groups */
 .dc-settings-group {
     background: #fff;
     border: 1px solid #ccd0d4;

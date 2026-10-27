@@ -1,12 +1,7 @@
 /**
- * DealersChoice Public Styles
- * 
- * Default styles for inventory display, filters, and boat detail pages.
- * These styles can be overridden in your theme folder.
- * 
+ * DealersChoice public styles for inventory listings, filters, sliders, single boat pages and the boat quiz.
+ *
  * @package DealersChoice
- * @subpackage Public
- * @since 1.0.0
  */
 
 /* ==========================================================================
@@ -46,7 +41,7 @@
 }
 
 /* ==========================================================================
-   Utility Classes (Namespaced with dc- to prevent theme conflicts)
+   Utility Classes (dc- prefix)
    ========================================================================== */
 .dc-row {
     padding: 3em 0 1.5em;
@@ -233,7 +228,7 @@ a.dc-button {
     overflow: hidden;
 }
 
-/* Hidden options for "Show More" functionality */
+/* Options hidden until "Show More" is toggled */
 .dealerschoice-filters .hidden-option {
     display: none;
 }
@@ -649,7 +644,7 @@ a.dc-button {
     margin-top: 20px;
 }
 
-/* Legacy boat card styles (for backward compatibility) */
+/* Boat card link */
 .dealerschoice-boat-card .boat-card-link {
     text-decoration: none;
     color: inherit;
@@ -1190,10 +1185,6 @@ a.dc-button {
 
 /* ==========================================================================
    Boat Quiz (dc-quiz-*)
-   Step-by-step interactive quiz that recommends a boat type and shows
-   matching inventory. All color values reference the plugin's existing CSS
-   custom properties so the quiz inherits site branding automatically.
-   Additional overrides go in your theme's dealerschoice-override.css.
    ========================================================================== */
 
 /* ── Wrapper ─────────────────────────────────────────────────────────────── */
@@ -1755,7 +1746,7 @@ a.dc-button {
     text-decoration: none;
 }
 
-/* ── Lead capture form (optional Gravity Forms integration) ── */
+/* ── Lead capture form ─────────────────────────────────────────────────── */
 .dc-quiz-lead-form {
     margin-top: 2.5rem;
     padding: 2rem;

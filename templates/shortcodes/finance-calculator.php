@@ -1,44 +1,28 @@
 <?php
 /**
- * Generic Finance Calculator Template
+ * Full finance calculator for the [dealerschoice_finance_calculator] shortcode.
  *
- * Renders the full, user-insertable [dealerschoice_finance_calculator]
- * shortcode: amount/rate/term/down-payment inputs, a quick loan-summary
- * result, and a collapsed full amortization schedule.
+ * Renders amount, rate, term and down payment inputs, a loan summary result
+ * and a collapsed amortization schedule.
  *
- * ── THEME OVERRIDE ───────────────────────────────────────────────────────────
- * Copy this file to {your-theme}/dealerschoice/shortcodes/finance-calculator.php
- * to customise the layout without editing the plugin.
+ * Override by copying to your-theme/dealerschoice/shortcodes/finance-calculator.php.
  *
- * ── AVAILABLE VARIABLES ──────────────────────────────────────────────────────
- * $title                 (string) Heading above the form.
- * $default_amount        (float|string) Pre-filled amount financed, or '' if blank.
- * $default_rate           (float) Default APR (%) from Settings.
- * $default_term           (int)   Default loan term (months) from Settings.
- * $down_payment_pct       (float) Default down payment (% of amount) from Settings.
- * $default_down_payment   (float|string) Pre-computed down payment, or '' if $default_amount is blank.
- * $term_options           (array) months => label loan term presets.
- * $disclaimer             (string) Disclaimer text from Settings (may contain basic HTML - output with wp_kses_post()).
- * $instance_id            (string) Unique DOM id prefix for this instance.
+ * @var string       $title                Heading above the form.
+ * @var float|string $default_amount       Prefilled amount financed, or '' when blank.
+ * @var float        $default_rate         Default APR (%).
+ * @var int          $default_term         Default loan term in months.
+ * @var float        $down_payment_pct     Default down payment as a percent of the amount.
+ * @var float|string $default_down_payment Precomputed down payment, or '' when $default_amount is blank.
+ * @var array        $term_options         Loan term presets as months => label.
+ * @var string       $disclaimer           Disclaimer text; may contain basic HTML.
+ * @var string       $instance_id          Unique DOM ID prefix for this instance.
  *
  * @package DealersChoice
- * @subpackage Templates
- * @since 1.0.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
-
-/** @var string $title */
-/** @var float|string $default_amount */
-/** @var float $default_rate */
-/** @var int $default_term */
-/** @var float $down_payment_pct */
-/** @var float|string $default_down_payment */
-/** @var array $term_options */
-/** @var string $disclaimer */
-/** @var string $instance_id */
 ?>
 <div
     class="dc-finance-calc"

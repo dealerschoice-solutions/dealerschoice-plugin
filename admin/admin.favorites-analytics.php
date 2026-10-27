@@ -1,12 +1,8 @@
 <?php
 /**
- * Favorite Boats Analytics Admin Page
- *
- * Displays analytics for the favorites system including summary cards,
- * a daily trend chart, and a ranked table of most-favorited boats.
+ * Favorite Boats analytics admin page: summary cards, daily trend chart and most-favorited boats.
  *
  * @package DealersChoice
- * @subpackage Admin
  */
 
 if ( ! defined('ABSPATH') ) {
@@ -14,7 +10,10 @@ if ( ! defined('ABSPATH') ) {
 }
 
 /**
- * Enqueue Chart.js on the Favorite Boats admin page.
+ * Enqueues Chart.js on the Favorite Boats admin page.
+ *
+ * @param string $hook Current admin page hook suffix.
+ * @return void
  */
 function dealers_choice_favorites_enqueue_assets( $hook ) {
     if ( $hook !== 'dealerschoice_page_dealers-choice-favorites' ) {
@@ -31,7 +30,9 @@ function dealers_choice_favorites_enqueue_assets( $hook ) {
 add_action( 'admin_enqueue_scripts', 'dealers_choice_favorites_enqueue_assets' );
 
 /**
- * Main callback for the Favorite Boats admin page.
+ * Renders the Favorite Boats admin page for the selected date range.
+ *
+ * @return void
  */
 function dealers_choice_favorites_page() {
     if ( ! current_user_can('manage_options') ) {
@@ -39,7 +40,7 @@ function dealers_choice_favorites_page() {
     }
 
     // ── Favorites-enabled guard ───────────────────────────────────────────
-    if ( get_option('dealers_choice_show_favorites', '1') !== '1' ) {
+    if ( ! dealerschoiceIsFavoritesEnabled() ) {
         echo '<div class="wrap">';
         echo '<h1>' . esc_html__('Favorite Boats Analytics', 'dealers-choice') . '</h1>';
         echo '<div class="notice notice-warning inline"><p>';
@@ -64,7 +65,7 @@ function dealers_choice_favorites_page() {
     $custom_from = isset($_GET['dc_from']) ? sanitize_text_field($_GET['dc_from']) : '';
     $custom_to   = isset($_GET['dc_to'])   ? sanitize_text_field($_GET['dc_to'])   : '';
 
-    // Validate custom dates
+    // Use the custom range when both dates parse; otherwise use the preset.
     $using_custom = false;
     if ( $preset === 'custom' && $custom_from && $custom_to && strtotime($custom_from) && strtotime($custom_to) ) {
         $date_from    = date('Y-m-d', strtotime($custom_from));
@@ -90,7 +91,6 @@ function dealers_choice_favorites_page() {
         }
     }
 
-    // Build SQL WHERE clause
     $where_parts = [];
     if ( $date_from ) {
         $where_parts[] = $wpdb->prepare('DATE(event_time) >= %s', $date_from);
@@ -125,7 +125,7 @@ function dealers_choice_favorites_page() {
          ORDER BY DATE(event_time) ASC"
     );
 
-    // Fill in zero days for continuous x-axis
+    // Fill missing days with zeros for a continuous x-axis.
     $chart_labels = [];
     $chart_adds   = [];
     $chart_removes = [];
@@ -145,7 +145,7 @@ function dealers_choice_favorites_page() {
             $current_day     = strtotime('+1 day', $current_day);
         }
     } else {
-        // "All time" — just use what we have
+        // All time: one point per day that has events.
         foreach ( $daily_rows as $row ) {
             $chart_labels[]  = date('M j', strtotime($row->day));
             $chart_adds[]    = (int) $row->adds;

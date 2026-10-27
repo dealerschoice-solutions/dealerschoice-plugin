@@ -1,36 +1,33 @@
 <?php
 /**
- * Template: Single Boat Detail Page
- * 
- * Displays the full detail page for a single boat.
- * This template can be overridden by copying it to:
- * your-theme/dealerschoice/single-boat.php
- * 
+ * Single boat detail page.
+ *
+ * Override by copying to your-theme/dealerschoice/single-boat.php.
+ * Loaded via template_include for singular boat posts and runs The Loop.
+ *
  * @package DealersChoice
- * @subpackage Templates
- * @since 1.0.0
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Get CTA settings
+// CTA page IDs.
 $quote_button = get_option('dealers_choice_get_a_quote_page_id', '');
 $finance_button = get_option('dealers_choice_financing_page_id', '');
 $trade_button = get_option('dealers_choice_value_your_trade_page_id', '');
 $test_drive_button = get_option('dealers_choice_schedule_test_drive_page_id', '');
 
-// Price Display settings
+// Price display settings.
 $show_price = get_option('dealers_choice_always_show_price', '0') === '1';
 $popup_form_id = get_option('dealers_choice_price_popup_form_id', '');
 $price_display_override = get_field('hide_sale_price');
 
-$show_favorites = get_option('dealers_choice_show_favorites', '1') === '1';
+$show_favorites = dealerschoiceIsFavoritesEnabled();
 
 $show_finance_calculator = get_option('dealers_choice_show_finance_calculator', '0') === '1';
 
-// Enqueue Slick slider scripts and styles
+// Slider and gallery assets.
 wp_enqueue_style( 'dealerschoice-slick' );
 wp_enqueue_script( 'dealerschoice-slick' );
 wp_enqueue_script( 'dealerschoice-slider' );
@@ -42,7 +39,6 @@ if(get_field('gallery')):
 endif;
 
 if($show_favorites):
-    // Enqueue favorites JS
     wp_enqueue_script( 'dealerschoice-favorites' );
 endif;
 
@@ -52,7 +48,6 @@ while (have_posts()) : the_post();
     global $post;
     $boat = new \DC\Boat($post);
 
-    // Get boat details
     $gallery_images = $boat->getGalleryImages();
     $main_specs = $boat->getMainSpecs();
     $tech_specs = $boat->getTechSpecs();
@@ -70,7 +65,6 @@ while (have_posts()) : the_post();
     $description = get_field('boat_description');
     $type = $boat->getType();
 
-    // add schema output for boat
     $boat->outputBoatSchema($boat);
 
     do_action('dealerschoice_before_single_boat', $post->ID);
@@ -209,7 +203,7 @@ while (have_posts()) : the_post();
                                         <?php endif; ?>
                                     <?php endif; ?>
 
-                                    <!-- Estimated Payments from IMS, not finance calculator -->
+                                    <!-- Estimated payment from IMS financing data -->
                                     <?php if($boat->hasFinancingData()): ?>
                                         <div class="payment">
                                             <p><strong>Estimated Payment:</strong></p>
@@ -373,23 +367,20 @@ while (have_posts()) : the_post();
                                                     <div class="boat-video-item dc-flex-50">
                                                         <div class="video-wrapper">
                                                             <?php
-                                                            // Check if it's a YouTube or Vimeo URL and embed accordingly
+                                                            // Embed YouTube and Vimeo URLs; link to anything else.
                                                             if (strpos($video_url, 'youtube.com') !== false || strpos($video_url, 'youtu.be') !== false) {
-                                                                // Extract YouTube video ID
                                                                 preg_match('/(youtu\.be\/|youtube\.com\/(watch\?(.*&)?v=|(embed|v)\/))([^\?&"\'<>]+)/', $video_url, $matches);
                                                                 $youtube_id = $matches[5] ?? '';
                                                                 if ($youtube_id) {
                                                                     echo '<iframe width="100%" height="315" src="https://www.youtube.com/embed/' . esc_attr($youtube_id) . '" frameborder="0" allowfullscreen></iframe>';
                                                                 }
                                                             } elseif (strpos($video_url, 'vimeo.com') !== false) {
-                                                                // Extract Vimeo video ID
                                                                 preg_match('/vimeo\.com\/(\d+)/', $video_url, $matches);
                                                                 $vimeo_id = $matches[1] ?? '';
                                                                 if ($vimeo_id) {
                                                                     echo '<iframe width="100%" height="315" src="https://player.vimeo.com/video/' . esc_attr($vimeo_id) . '" frameborder="0" allowfullscreen></iframe>';
                                                                 }
                                                             } else {
-                                                                // For other URLs, just display the link
                                                                 echo '<a href="' . esc_url($video_url) . '" target="_blank">' . esc_html($video_url) . '</a>';
                                                             }
                                                             ?>
@@ -413,11 +404,11 @@ while (have_posts()) : the_post();
 
     <?php
 
-    // Similar Boats Section (stepped queries: model, make, type)
+    // Similar boats: up to 6, filled by same model, then make, then type, then any.
     $similar_ids = [];
     $current_id = get_the_ID();
 
-    // 1. By same model (meta)
+    // Same model.
     if ($model) {
         $model_query = new WP_Query([
             'post_type' => 'boat',
@@ -435,7 +426,7 @@ while (have_posts()) : the_post();
         $similar_ids = $model_query->posts;
     }
 
-    // 2. By same make (meta), fill up to 6
+    // Same make.
     if (count($similar_ids) < 6 && $make) {
         $make_query = new WP_Query([
             'post_type' => 'boat',
@@ -453,7 +444,7 @@ while (have_posts()) : the_post();
         $similar_ids = array_merge($similar_ids, $make_query->posts);
     }
 
-    // 3. By same type (taxonomy), fill up to 6
+    // Same boat type.
     if (count($similar_ids) < 6 && !empty($type)) {
         $type_query = new WP_Query([
             'post_type' => 'boat',
@@ -471,7 +462,7 @@ while (have_posts()) : the_post();
         $similar_ids = array_merge($similar_ids, $type_query->posts);
     }
 
-    // 4. If still not enough, fill with any boats (excluding current and already found)
+    // Any other boats.
     if (count($similar_ids) < 6) {
         $any_query = new WP_Query([
             'post_type' => 'boat',
@@ -482,7 +473,7 @@ while (have_posts()) : the_post();
         $similar_ids = array_merge($similar_ids, $any_query->posts);
     }
 
-    // Now get the boats in the order of $similar_ids
+    // Load the boats in $similar_ids order.
     if (!empty($similar_ids)) {
         $final_query = new WP_Query([
             'post_type' => 'boat',

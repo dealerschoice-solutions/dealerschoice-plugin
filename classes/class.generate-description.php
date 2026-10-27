@@ -1,31 +1,25 @@
 <?php
 /**
- * Generate a boat description from it's attributes by sending to AI service to create content.
- * Add a button to the edit boat admin page in the `wp-content-editor-tools` area to generate
- * the description and add it to the main Wordpress editor.
- * Required constants:
- *   DCS_CLAUDE_API_KEY
- *   DCS_OPENAI_API_KEY
- *   DCS_AI_SERVICE // Options: 'openai' or 'claude'
+ * AI boat description generator: adds a "Generate Description" button to the boat editor
+ * and inserts text returned by OpenAI or Claude.
+ *
+ * Constants: DCS_AI_SERVICE ('openai' or 'claude'), DCS_OPENAI_API_KEY, DCS_CLAUDE_API_KEY.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
-    exit; // Exit if accessed directly.
+    exit;
 }
 
 /**
- * Create button to generate description in boat edit admin page. Add to `wp-content-editor-tools`
- * through the `media_buttons` action hook.
+ * Outputs the Generate Description button above the boat editor (media_buttons hook).
  */
 function dc_add_generate_description_button() {
     global $post;
 
-    // Only add button on boat post type edit screen
     if ( 'boat' !== $post->post_type ) {
         return;
     }
 
-    // Only add the button if the AI service has been defined
     if (!defined( 'DCS_AI_SERVICE' )){
         return;
     }
@@ -45,19 +39,19 @@ function dc_add_generate_description_button() {
 add_action( 'media_buttons', 'dc_add_generate_description_button' );
 
 /**
- * Enqueue JavaScript for handling the button click and AJAX request.
+ * Enqueues the Generate Description script on the boat edit screen.
+ *
+ * @param string $hook Current admin page hook suffix.
  */
 function dc_enqueue_generate_description_script( $hook ) {
     global $post;
 
-    // Only enqueue script on boat post type edit screen
     if ( !$post || 'boat' !== $post->post_type ) {
         return;
     }
 
     wp_enqueue_script( 'dc-generate-description', plugin_dir_url( __FILE__ ) . '/admin/generate-description.js', array( 'jquery' ), '1.0.1', true );
 
-    // Localize script with data including AJAX URL
     wp_localize_script( 'dc-generate-description', 'dc_generate_description', array(
         'nonce'   => wp_create_nonce( 'dc_generate_description_nonce' ),
         'post_id' => $post->ID,
@@ -67,16 +61,14 @@ function dc_enqueue_generate_description_script( $hook ) {
 add_action( 'admin_enqueue_scripts', 'dc_enqueue_generate_description_script' );
 
 /**
- * AJAX handler to generate boat description.
+ * AJAX handler that builds the prompt from boat attributes and returns the generated description.
  */
 function dc_generate_boat_description() {
-    // Verify user capabilities
     if ( ! current_user_can( 'edit_posts' ) ) {
         wp_send_json_error( 'Insufficient permissions.' );
         return;
     }
 
-    // Check nonce for security
     if ( ! wp_verify_nonce( $_POST['nonce'], 'dc_generate_description_nonce' ) ) {
         wp_send_json_error( 'Invalid nonce.' );
         return;
@@ -90,37 +82,27 @@ function dc_generate_boat_description() {
         return;
     }
 
-    // Check if user can edit this specific post
     if ( ! current_user_can( 'edit_post', $post_id ) ) {
         wp_send_json_error( 'Cannot edit this boat.' );
         return;
     }
 
-    // Gather boat attributes
     $make = get_the_terms( $post_id, 'make' );
     $model = get_the_terms( $post_id, 'model' );
     $year = get_field( 'year', $post_id );
     $length = get_field( 'length', $post_id );
     $boat_type = get_the_terms( $post_id, 'boat_type' );
 
-    // Construct prompt for AI service
     $prompt = "### ROLE ###\n Act as an expert marine copywriter and local SEO specialist. Your mission is to create a compelling boat description that ranks well on search engines for local buyers and persuades them to inquire.\n";
     $prompt .= "### TASK ###\n Generate a detailed and engaging 4-5 sentence description for a boat with the following attributes. The description must be persuasive, high-end, and optimized for local SEO.\n";
     $prompt .= "### BOAT ATTRIBUTES ###\n";
-    // get_the_terms() returns array|false|WP_Error. Resolve each to a plain
-    // string once, up front. The instruction lines below previously
-    // concatenated the raw arrays, which PHP renders as the literal string
-    // "Array" (a warning, not a fatal, so it shipped silently and degraded
-    // every generated description).
+    // Resolve the first term of each taxonomy to a name string.
     $make_name  = ( $make && ! is_wp_error( $make ) && isset( $make[0] ) ) ? $make[0]->name : '';
     $model_name = ( $model && ! is_wp_error( $model ) && isset( $model[0] ) ) ? $model[0]->name : '';
     $type_name  = ( $boat_type && ! is_wp_error( $boat_type ) && isset( $boat_type[0] ) ) ? $boat_type[0]->name : '';
     $condition  = get_field( 'type', $post_id );
 
-    // Local SEO market, derived from the boat's own location term rather than
-    // hardcoded, so the prompt is correct for every dealer running the plugin.
-    // Falls back to omitting the geographic example entirely: a missing market
-    // costs the dealer far less than a wrong one.
+    // Local SEO market from the boat's location term; omitted when there is none.
     $location_terms = get_the_terms( $post_id, 'location' );
     $market         = ( $location_terms && ! is_wp_error( $location_terms ) && isset( $location_terms[0] ) )
         ? $location_terms[0]->name
@@ -150,10 +132,8 @@ function dc_generate_boat_description() {
     $prompt .= "The entire response must be plain text only. Do not use any Markdown formatting like headings (#), bold text (**), or bullet points.\n";
     $prompt .= "### RESPONSE ###\n Provide only the boat description as plain text without any additional commentary.";
 
-    // Get the AI service to use from config
     $ai_service = defined( 'DCS_AI_SERVICE' ) ? DCS_AI_SERVICE : 'openai';
 
-    // Call AI service
     if ( 'openai' === $ai_service ) {
         $description = dc_openai_generate_description( $prompt );
     } else {
@@ -165,22 +145,20 @@ function dc_generate_boat_description() {
         return;
     }
 
-    // This converts the string to UTF-8, replacing any invalid characters.
+    // Replace invalid UTF-8 sequences.
     $clean_description = mb_convert_encoding($description, 'UTF-8', 'UTF-8');
 
-    // Send success response with the cleaned description
     wp_send_json_success( $clean_description );
 }
 add_action( 'wp_ajax_dc_generate_boat_description', 'dc_generate_boat_description' );
 
 /**
- * OpenAI API integration to generate boat description from prompt
- * @param string $prompt The prompt to send to OpenAI
- * @return string|false The generated description or false on failure
- * source: https://platform.openai.com/docs/
+ * Generates a description with the OpenAI Responses API.
+ *
+ * @param string $prompt Prompt text.
+ * @return string|false Generated description, or false on failure.
  */
 function dc_openai_generate_description( $prompt ) {
-    // Check if the key is defined in wp-config.php
     if ( !defined( 'DCS_OPENAI_API_KEY' ) || empty( DCS_OPENAI_API_KEY ) ) {
         error_log('OpenAI API Error: Key not defined in wp-config.php');
         return false;
@@ -207,11 +185,9 @@ function dc_openai_generate_description( $prompt ) {
     $body = wp_remote_retrieve_body( $response );
     $data = json_decode( $body, true );
 
-    // Parse the response from OpenAI Responses API
     if( isset($data['output'][1]['content'][0]['text']) ) {
         return trim( $data['output'][1]['content'][0]['text'] );
     } else {
-        // Log the error response from OpenAI for debugging
         error_log('OpenAI API Response Error: ' . $body);
     }
 
@@ -220,13 +196,12 @@ function dc_openai_generate_description( $prompt ) {
 
 
 /**
- * Claude API integration to generate boat description from prompt
- * @param string $prompt The prompt to send to Claude
- * @return string|false The generated description or false on failure
- * source: https://docs.claude.com/reference/messages_post
+ * Generates a description with the Claude Messages API.
+ *
+ * @param string $prompt Prompt text.
+ * @return string|false Generated description, or false on failure.
  */
 function dc_claude_generate_description( $prompt ) {
-    // Check if the key is defined in wp-config.php
     if ( !defined( 'DCS_CLAUDE_API_KEY' ) || empty( DCS_CLAUDE_API_KEY ) ) {
         error_log('Claude API Error: Key not defined in wp-config.php');
         return false;
@@ -260,12 +235,10 @@ function dc_claude_generate_description( $prompt ) {
     $body = wp_remote_retrieve_body( $response );
     $data = json_decode( $body, true );
 
-    // Parse the response from the Claude Messages API
     if ( isset( $data['content'][0]['text'] ) ) {
         $text = $data['content'][0]['text'];
         return trim($text);
     } else {
-        // Log the error response from Claude for debugging
         error_log('Claude API Response Error: ' . $body);
     }
 

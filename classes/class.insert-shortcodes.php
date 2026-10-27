@@ -1,15 +1,8 @@
 <?php
 /**
- * Shortcode Builder — modal UI for inserting DealersChoice shortcodes into any
- * TinyMCE editor (main WordPress content area or any ACF WYSIWYG field).
- *
- * The single source of truth for available shortcodes and their configurable
- * attributes lives in dc_get_shortcode_schema(). Update that function whenever
- * shortcodes are added, removed, or their attributes change and the modal UI
- * will automatically reflect those changes.
+ * Shortcode builder modal for inserting DealersChoice shortcodes into TinyMCE editors.
  *
  * @package DealersChoice
- * @since 1.0.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -17,23 +10,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Returns the canonical shortcode schema used to build the modal form.
+ * Returns the shortcode schema used to build the builder modal form.
  *
- * Each shortcode entry contains:
- *   label       – Human-readable name shown in the picker.
- *   description – Brief description shown on the picker card.
- *   fields      – Associative array of attribute_name => field_config.
+ * Each shortcode entry has a label, a description and a fields array of
+ * attribute_name => config. Field config keys: type ('text', 'number',
+ * 'toggle', 'select' or 'taxonomy'), label, default (omitted from the
+ * shortcode when unchanged), options (select), and taxonomy, multiple and
+ * terms (taxonomy; terms are value/label pairs of non-empty term slugs).
  *
- * Field config keys:
- *   type     – 'text' | 'number' | 'toggle' | 'select' | 'taxonomy'
- *   label    – Form label text.
- *   default  – Default value (omitted from shortcode string when unchanged).
- *   options  – (select) associative array of value => label.
- *   taxonomy – (taxonomy) taxonomy slug to query.
- *   multiple – (taxonomy) whether multiple terms may be selected.
- *   terms    – Populated at runtime from get_terms(); empty array if none exist.
- *
- * @return array
+ * @return array Shortcode tag => shortcode config.
  */
 function dc_get_shortcode_schema() {
     $fetch = function( $taxonomy ) {
@@ -49,7 +34,6 @@ function dc_get_shortcode_schema() {
             return array();
         }
 
-        // Build slug-keyed list so the shortcode receives slugs, not IDs.
         $result = array();
         foreach ( get_terms( array( 'taxonomy' => $taxonomy, 'hide_empty' => true, 'orderby' => 'name', 'fields' => 'all' ) ) as $term ) {
             $result[] = array( 'value' => $term->slug, 'label' => $term->name );
@@ -57,7 +41,7 @@ function dc_get_shortcode_schema() {
         return $result;
     };
 
-    // Build Gravity Forms select options — populated when GF is active.
+    // Lead form options from Gravity Forms, when active.
     $gf_forms_options = array( '0' => '— No Lead Form —' );
     if ( class_exists( 'GFAPI' ) ) {
         foreach ( GFAPI::get_forms( true ) as $form ) {
@@ -293,8 +277,9 @@ function dc_get_shortcode_schema() {
 }
 
 /**
- * Add the "Insert DealersChoice" button to the media buttons toolbar above any
- * TinyMCE editor on a post/page edit screen.
+ * Outputs the "Insert DealersChoice" button in the media buttons area above editors.
+ *
+ * @return void
  */
 function dc_add_shortcode_button() {
     ?>
@@ -310,9 +295,10 @@ function dc_add_shortcode_button() {
 add_action( 'media_buttons', 'dc_add_shortcode_button' );
 
 /**
- * Register the DealersChoice shortcode button in every TinyMCE toolbar so the
- * builder modal is accessible from the main content editor and from any ACF
- * WYSIWYG field on the same screen.
+ * Registers the DealersChoice TinyMCE plugin for users who can edit posts.
+ *
+ * @param array $plugins TinyMCE plugin name => script URL.
+ * @return array Filtered plugins.
  */
 function dc_register_tinymce_plugin( $plugins ) {
     if ( ! current_user_can( 'edit_posts' ) ) {
@@ -330,9 +316,10 @@ function dc_add_tinymce_button( $buttons ) {
 add_filter( 'mce_buttons', 'dc_add_tinymce_button' );
 
 /**
- * Enqueue the shortcode builder script and styles on all post/page edit screens.
+ * Enqueues the shortcode builder script, styles and schema on post edit screens.
  *
  * @param string $hook Current admin page hook suffix.
+ * @return void
  */
 function dc_enqueue_generate_shortcode_script( $hook ) {
     if ( ! in_array( $hook, array( 'post.php', 'post-new.php' ), true ) ) {

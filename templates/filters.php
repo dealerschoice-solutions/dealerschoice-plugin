@@ -1,14 +1,26 @@
 <?php
 /**
- * Template: Filter Sidebar
- * 
- * Displays the inventory filter sidebar with all available filters.
- * This template can be overridden by copying it to:
- * your-theme/dealerschoice/filters.php
- * 
+ * Inventory filter sidebar.
+ *
+ * Override by copying to your-theme/dealerschoice/filters.php.
+ *
+ * Each term group is an array with 'terms' (list of ['term' => WP_Term, 'count' => int])
+ * and, for checkbox groups with an "All" option, 'total' (int).
+ *
+ * @var array $filters     Active filters keyed by taxonomy; each value is an array of slugs or false.
+ * @var array $locations   Location term group.
+ * @var array $conditions  Condition term group.
+ * @var array $statuses    Boat status term group. Optional.
+ * @var array $years       Year term group.
+ * @var array $categories  Boat type term group.
+ * @var array $makes       Make term group.
+ * @var array $models      Model term group.
+ * @var array $priceRanges Price range term group.
+ * @var array $lengths     Length range term group.
+ * @var array $horsepowers Horsepower range term group.
+ * @var array $capacities  Person capacity term group.
+ *
  * @package DealersChoice
- * @subpackage Templates
- * @since 1.0.0
  */
 
 if (!defined('ABSPATH')) {

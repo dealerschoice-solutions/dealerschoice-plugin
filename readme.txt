@@ -1,118 +1,139 @@
 === DealersChoice Solutions ===
 Contributors: mannixmarketing
-Tags: inventory, dealership, boats, custom post type, api sync
+Tags: inventory, boats, dealership, marina, inventory sync
 Requires at least: 6.0
-Tested up to: 6.8
-Stable tag: 1.0.0
-Requires PHP: 7.4
+Tested up to: 7.0
+Requires PHP: 8.1
+Stable tag: 1.0.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Sync and manage dealership inventory from your DMS to WordPress. Perfect for boat dealers, ATV dealers, and vehicle dealerships.
+Syncs boat inventory from the DealersChoice IMS and displays it on dealer and marina websites.
 
 == Description ==
 
-DealersChoice Solutions is a powerful WordPress plugin that allows you to automatically sync and display dealership inventory (boats, ATVs, vehicles, etc.) on your website. Connect to your Dealership Management System (DMS) through our API and keep your website inventory up-to-date automatically.
+A WordPress plugin that syncs boat inventory from the DealersChoice Inventory Management System (IMS) and displays it on dealer and marina websites: a filterable inventory listing, single boat pages, sliders, favorites, a "find your boat" quiz, finance calculators, and an optional "Reveal Price" lead form.
 
-= Key Features =
-
-* **Automatic Inventory Sync** - Connect to your DMS and automatically sync listings to WordPress
-* **Custom Post Type** - Dedicated "Boat" post type with 9 taxonomies for advanced filtering
-* **30+ Custom Fields** - Comprehensive boat specifications using Advanced Custom Fields
-* **Smart Sync Logic** - Timestamp-based sync prevents unnecessary processing
-* **Image Management** - Automatic image download with intelligent caching
-* **Local Listings** - Add manual inventory that won't be affected by API syncs
-* **Draft Management** - Old listings moved to draft (not deleted), with automatic cleanup
-* **Manual Sync Trigger** - Admin UI button and WP-CLI commands
-* **Comprehensive Logging** - Track all sync operations, errors, and changes
-* **Performance Optimized** - Database indexes and efficient queries for large inventories
+The plugin is free software (GPL v2 or later). Syncing inventory requires a DealersChoice subscription and API credentials.
 
 = Requirements =
 
-* Advanced Custom Fields (ACF) plugin - Free or Pro version
-* DealersChoice API credentials (requires separate subscription)
+* WordPress: 6.0 or higher
+* PHP: 8.1 or higher (8.3 recommended)
+* Advanced Custom Fields: Required, free or Pro
+* DealersChoice API: Client ID and API Key from a DealersChoice subscription
 
-= WP-CLI Commands =
+**Optional integrations**
 
-For advanced users:
+Each feature turns itself off when its plugin is missing or not configured.
 
-* `wp dealers-choice sync` - Run inventory sync
-* `wp dealers-choice cleanup` - Delete old draft boats
-* `wp dealers-choice logs` - View recent logs
-* `wp dealers-choice stats` - Display statistics
+* Gravity Forms: Reveal Price form, quiz lead form
+* Popup Maker: Reveal Price popup, repeat-viewer call-to-action popup
+* Yoast SEO: Default SEO titles and descriptions for boats
+
+= How sync works =
+
+- Inventory syncs **twice daily** by WP-Cron, and on demand from the Sync Inventory page or WP-CLI.
+- A sync is skipped when the IMS reports no changes since the last sync.
+- Boats are matched by their IMS ID, then created or updated with their details, taxonomy terms and photos. Photos are downloaded once and reused.
+- Synced fields are overwritten on every sync. Manual gallery order and the featured image are kept.
+- Boats no longer in the IMS feed are set to **draft**. A daily cron permanently deletes boat drafts not modified in 6 months.
+- **Local listings:** boats with **Is Local** checked are never unpublished by sync. Use this for boats entered by hand in WordPress.
+
+= Shortcodes =
+
+The **Insert DealersChoice** button above the Classic Editor builds these for you.
+
+On/off attributes accept `true` or `false`, except where noted.
+
+**`[dealerschoice_inventory]`**
+
+The full inventory listing with filters, search, sort and pagination. The first page of results is rendered on the server so search engines see it; later updates load by AJAX.
+
+* `posts_per_page` (Default: `12`): Boats per page (maximum 60)
+* `show_filters` (Default: on): Show the filter sidebar. Use `0` to hide (`false` does not work).
+* `show_search` (Default: on): Show the search box. Use `0` to hide.
+* `show_sort` (Default: on): Show the sort dropdown. Use `0` to hide.
+* `category` / `categories`: Boat type slug(s), comma separated
+* `condition`: Condition slug(s)
+* `status`: Status slug(s), e.g. `in-stock`
+* `location`: Location slug(s)
+* `make`: Make slug(s)
+* `promotion`: Promotion slug(s)
+* `lock`: Extra constraints as `key:slug,slug|key:slug`
+* `lock_notice` (Default: `false`): Show a "Showing: ..." line for the constrained values
+
+Filter attributes are enforced on the server and their filter controls are hidden, so visitors can't clear them.
+
+`lock` keys: `location`, `condition`, `status`, `year`, `category`, `make`, `model`, `price`, `length`, `horsepower`, `capacity`, `promotion`.
+
+    [dealerschoice_inventory posts_per_page="24"]
+    [dealerschoice_inventory category="pontoon" condition="new"]
+    [dealerschoice_inventory location="main-street" show_filters="0"]
+    [dealerschoice_inventory lock="promotion:featured|condition:used" lock_notice="true"]
+
+**`[dealerschoice_slider]`**
+
+A carousel of boats.
+
+* `limit` (Default: `6`): Number of boats
+* `category`, `condition`, `location`, `make`, `year`, `promotion`: Slug filters
+* `tax`: Extra constraints, same syntax as `lock`
+* `orderby` (Default: `date`): `date`, `price`, `year`, `length` or `rand`
+* `order` (Default: `DESC`): `ASC` or `DESC`
+* `slides_to_show` (Default: `3`): Slides visible at full width
+* `autoplay` (Default: `false`): Advance slides automatically
+* `autoplay_speed` (Default: `3000`): Milliseconds between slides
+
+When autoplay is on, the slider shows a play/pause button.
+
+    [dealerschoice_slider limit="10" category="pontoon"]
+    [dealerschoice_slider condition="new" orderby="price" order="ASC"]
+
+**Other shortcodes**
+
+* `[dealerschoice_filters]`: The filter sidebar on its own, for custom layouts
+* `[dealerschoice_favorites]`: Boats the visitor saved as favorites (stored in their browser)
+* `[dealerschoice_location_list]`: Buttons that set the visitor's preferred location
+* `[dealerschoice_boat_quiz]`: "Find your boat" quiz. Attributes: `title`, `subtitle`, `submit_label`, `gravity_form_id` (optional lead form), `boat_count` (1-12, default 3)
+* `[dealerschoice_finance_calculator]`: Payment calculator. Attributes: `title`, `default_amount`
+* `[dealerschoice_reveal_price_message]`: Where Reveal Price status messages appear inside the popup
+
+= Privacy =
+
+Dealers should cover these in their privacy policy:
+
+- **Favorites** are stored in the visitor's browser (localStorage). Favorite and unfavorite events are counted per boat for analytics with no personal data.
+- **Reveal Price** sets a cookie (`dc_price_unlocked`) to remember unlocked prices. When a ZIP code list is set, the visitor's browser location is sent to BigDataCloud to look up their ZIP code.
+- **Preferred location** and the **repeat-viewer popup** count are stored in the visitor's browser.
+- Quiz answers are not stored by the plugin. They are only sent if the visitor submits the optional Gravity Form.
+
+Template overrides, hooks, filters and other developer documentation are in README.md, included with the plugin.
 
 == Installation ==
 
-1. **Install Required Plugin**
-   * Install and activate Advanced Custom Fields (ACF) plugin
-   * Available for free in the WordPress plugin repository
+1. Install and activate Advanced Custom Fields.
+2. Upload the `dealerschoice` folder to `/wp-content/plugins/` (or upload the zip under **Plugins > Add New > Upload Plugin**) and activate it.
+   Activation registers the `boat` post type and taxonomies, adds a database index, creates the favorites analytics table, and schedules the sync.
+3. Go to **DealersChoice > Settings**, enter your Client ID and API Key, and click **Save Changes**. Credentials are validated against the IMS before they are saved.
+4. Go to **DealersChoice > Sync Inventory** and click **Sync Inventory Now** (or run `wp dealers-choice sync`).
+5. Create a page at `/inventory/` containing `[dealerschoice_inventory]`. Redirects and quiz links point to this page.
 
-2. **Install DealersChoice**
-   * Upload plugin files to `/wp-content/plugins/dealerschoice/`
-   * Or install through WordPress admin (Plugins > Add New)
-
-3. **Activate Plugin**
-   * Activate through 'Plugins' screen in WordPress
-   * Post type, taxonomies, and database indexes are created automatically
-
-4. **Configure API Credentials**
-   * Go to Dealers Choice > Settings
-   * Enter your Client ID and API Key
-   * Click Save to validate credentials
-
-5. **Run Initial Sync**
-   * Go to Dealers Choice > Sync Inventory
-   * Click "Sync Inventory Now" button
-
-== Frequently Asked Questions ==
-
-= Does this plugin require Advanced Custom Fields? =
-
-Yes, ACF is required for this plugin to function. You can use either the free or Pro version of ACF. The plugin will display an admin notice if ACF is not installed.
-
-= Do I need a DealersChoice subscription? =
-
-Yes. While the plugin software is free (GPL-licensed), access to the DealersChoice API requires a separate paid subscription. Visit https://www.dealerschoicesolutions.com for pricing and terms.
-
-= How often does inventory sync? =
-
-Inventory syncs when you manually trigger it through the admin interface or WP-CLI. The plugin uses timestamp-based sync, so if your inventory hasn't changed since the last sync, it will skip processing.
-
-= What happens to boats that are removed from my DMS? =
-
-Boats that are no longer in your DMS inventory are automatically moved to draft status (not deleted). A daily CRON job deletes drafts older than 6 months.
-
-= Can I add boats manually that won't be affected by sync? =
-
-Yes! Enable the "Is Local" field when creating/editing a boat post. Local listings are excluded from the sync unpublishing process.
-
-= Does this work with large inventories? =
-
-Yes. The plugin includes performance optimizations:
-* Database indexes for fast queries
-* Image caching to prevent duplicate downloads
-* Efficient batch processing
-* Optimized taxonomy counting
-
-= Can I see what happened during a sync? =
-
-Yes. Go to Dealers Choice > Sync Inventory to view recent logs. Logs show detailed information about what was created, updated, or unpublished, plus any errors.
-
-= What are the WP-CLI commands? =
-
-Available commands:
-* `wp dealers-choice sync` - Run inventory sync
-* `wp dealers-choice cleanup` - Delete old draft boats
-* `wp dealers-choice logs --lines=50` - View 50 recent log entries
-* `wp dealers-choice logs --level=error` - View only errors
-* `wp dealers-choice stats` - Display plugin statistics
+Updates are delivered through the WordPress **Plugins** screen from the DealersChoice update server.
 
 == Changelog ==
-### 1.0.8.1
-- Minor plugin security fixes
-- Added a "Shop Other Locations" setting. When a multi-location marina filters by location, they can enable a "Shop Other Locations" block that shows up after the current location's inventory with similar boats available at their other locations.
 
-### 1.0.8
+= 1.0.9 =
+- Enhancement: The first page of `[dealerschoice_inventory]` results is now rendered server-side, so boats are in the initial HTML for search engines and AI crawlers. Filters, sort, search and pagination still update via AJAX.
+- Enhancement: Inventory listings output `ItemList` structured data (JSON-LD) for the boats shown, kept in sync on every AJAX update.
+- Enhancement: Pagination links now use real `?inventory_page=N` URLs (crawlable, open in new tab).
+- Enhancement: Added a "Shop Other Locations" setting. When a multi-location marina filters by location, they can enable a "Shop Other Locations" block that shows up after the current location's inventory with similar boats available at their other locations.
+- Fix: Single boat schema no longer outputs gated or hidden prices; boat schema type is now Product + Vehicle.
+- Accessibility: Inventory result updates are announced to screen readers; current page is marked with `aria-current`.
+- Fix: In-page anchor links on inventory pages no longer trigger an inventory reload.
+- Minor plugin security fixes
+
+= 1.0.8 =
 - Minor plugin settings and display updates
 - Fix: Reveal Price system now tracks displayed price in form submission
 - Enhancement: Added special 'Promotions' taxonomy to allow custom flags like Featured, Quick Sales, etc.
@@ -123,49 +144,39 @@ Available commands:
 - Enhancement: Inventory Sliders now allow autoplay via shortcode attribute
 - Enhancement: Added settings for Reveal Price system to unlock all prices or only the unit in which the button was clicked
 
-### 1.0.7
+= 1.0.7 =
 - Minor plugin settings and display updates
 
-### 1.0.6
+= 1.0.6 =
 - Added boat finance calculator with two options: full financial data and quick calculator on the single boat listing
 
-### 1.0.5
+= 1.0.5 =
 - Added boat weight sync and display
 
-### 1.0.4
+= 1.0.4 =
 - Fixed image sync to store last image sync only on successful sync
 - Fixed image sync to use a proper file extension when a URL does not include extension
 - Updated search functionality to include search by HIN or Stock Number
 - Added Custom Offers settings to the plugin settings display
 - Fixed display of Favorites graph
 
-### 1.0.3
+= 1.0.3 =
 - Updated check for shortcodes to ensure proper enqueuing of scripts and styles.
 
-### 1.0.2
+= 1.0.2 =
 - Updated the reveal price popup system to include the stock number and boat name to pass to the form notification.
 
 = 1.0.1 =
-* Added plugin update notification system
+- Added plugin update checker
 
 = 1.0.0 =
-* Initial release
-* Automatic inventory sync from DealersChoice API
-* Custom boat post type with 9 taxonomies
-* 30+ Advanced Custom Fields for boat specifications
-* Manual sync trigger (admin UI and WP-CLI)
-* Comprehensive logging system with admin viewer
-* Performance optimizations with database indexes
-* Smart image caching to prevent duplicates
-* Local listing support
-* Automatic draft cleanup (6 months)
-* Activation/deactivation hooks
-* ACF dependency check with admin notice
-
-== License ==
-
-This plugin is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 2 of the License, or any later version.
-
-This plugin is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
-
-**Note**: Premium services and API access require separate subscription. Visit https://www.dealerschoicesolutions.com for service terms and pricing.
+- Initial release
+- Automatic inventory sync from DealersChoice API
+- Custom boat post type with custom taxonomies
+- Advanced Custom Fields for storing boat details
+- Manual sync trigger (admin UI and WP-CLI)
+- Comprehensive logging system
+- Performance optimizations with database indexes
+- Smart image caching
+- Local listing support
+- Automatic draft cleanup

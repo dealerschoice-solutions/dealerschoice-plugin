@@ -1,44 +1,28 @@
 <?php
 /**
- * Quick Finance Calculator Template
+ * Quick finance calculator on single boat pages.
  *
- * Renders the compact finance calculator automatically shown on
- * single-boat.php (see DC\Shortcodes::render_quick_finance_calculator()).
- * Not user-insertable - the boat's price is fixed/display-only; only rate,
- * term, and down payment are editable. Output is a single estimated
- * monthly payment line, no loan-summary breakdown or amortization schedule.
+ * Rendered by DC\Shortcodes::render_quick_finance_calculator(). The boat price
+ * is fixed; rate, term and down payment are editable. Shows an estimated
+ * monthly payment.
  *
- * ── THEME OVERRIDE ───────────────────────────────────────────────────────────
- * Copy this file to {your-theme}/dealerschoice/shortcodes/finance-calculator-quick.php
- * to customise the layout without editing the plugin.
+ * Override by copying to your-theme/dealerschoice/shortcodes/finance-calculator-quick.php.
  *
- * ── AVAILABLE VARIABLES ──────────────────────────────────────────────────────
- * $price                 (float) The boat's visible sale price.
- * $default_rate           (float) Default APR (%) from Settings.
- * $default_term           (int)   Default loan term (months) from Settings.
- * $down_payment_pct       (float) Default down payment (% of price) from Settings.
- * $default_down_payment   (float) Pre-computed down payment ($price * $down_payment_pct / 100).
- * $term_options           (array) months => label loan term presets.
- * $disclaimer             (string) Disclaimer text from Settings (may contain basic HTML - output with wp_kses_post()).
- * $instance_id            (string) Unique DOM id prefix for this instance.
+ * @var float  $price                Boat sale price.
+ * @var float  $default_rate         Default APR (%).
+ * @var int    $default_term         Default loan term in months.
+ * @var float  $down_payment_pct     Default down payment as a percent of the price.
+ * @var float  $default_down_payment Precomputed down payment.
+ * @var array  $term_options         Loan term presets as months => label.
+ * @var string $disclaimer           Disclaimer text; may contain basic HTML.
+ * @var string $instance_id          Unique DOM ID prefix for this instance.
  *
  * @package DealersChoice
- * @subpackage Templates
- * @since 1.0.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
-
-/** @var float  $price */
-/** @var float  $default_rate */
-/** @var int    $default_term */
-/** @var float  $down_payment_pct */
-/** @var float  $default_down_payment */
-/** @var array  $term_options */
-/** @var string $disclaimer */
-/** @var string $instance_id */
 ?>
 <div
     class="dc-finance-calc dc-finance-calc--quick"

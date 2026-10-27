@@ -1,46 +1,9 @@
 <?php
 /**
- * AJAX Handlers
- * 
- * Handles all AJAX requests for inventory filtering, searching, and pagination.
- * This class processes user interactions with the inventory filters and returns
- * filtered results dynamically without page reloads.
- * 
+ * Public and admin AJAX handlers: inventory search, filter counts, reveal price,
+ * favorites analytics, the boat quiz and the legacy background sync.
+ *
  * @package DealersChoice
- * @subpackage Classes
- * @since 1.0.0
- * 
- * Features:
- * - Dynamic inventory filtering (location, condition, year, make, model, etc.)
- * - Search functionality with keyword matching
- * - Multiple sort options (price, date, length, etc.)
- * - Pagination with configurable posts per page
- * - Efficient database queries with proper indexing
- * - Filter counts updated based on current selection
- * 
- * AJAX Actions:
- * - search_inventory: Main inventory search/filter handler
- * - get_filter_counts: Updates filter counts based on current selections
- * - reveal_price: Reveal the price of a specific boat
- * 
- * Usage:
- * ```javascript
- * jQuery.ajax({
- *     url: dealersChoicePublic.ajaxUrl,
- *     type: 'POST',
- *     data: {
- *         action: 'search_inventory',
- *         filters: {...},
- *         sortBy: 'price-asc',
- *         currentPage: 1
- *     }
- * });
- * ```
- * 
- * Dependencies:
- * - WordPress WP_Query
- * - DC\Inventory class for filter counts
- * - DC\Template_Loader for rendering results
  */
 
 namespace DC;
@@ -52,21 +15,19 @@ if (!defined('ABSPATH')) {
 class AJAX_Handlers {
     
     /**
-     * Initialize AJAX handlers
+     * Registers AJAX actions and the search filter.
+     *
+     * @return void
      */
     public static function init() {
-        // Public AJAX actions (available to non-logged-in users)
+        // Public actions.
         add_action('wp_ajax_search_inventory', [__CLASS__, 'search_inventory']);
         add_action('wp_ajax_nopriv_search_inventory', [__CLASS__, 'search_inventory']);
         
         add_action('wp_ajax_get_filter_counts', [__CLASS__, 'get_filter_counts']);
         add_action('wp_ajax_nopriv_get_filter_counts', [__CLASS__, 'get_filter_counts']);
 
-        // Extends the inventory search ('s' param) to also match ACF fields
-        // like Stock Number and HIN, not just post title/content. Registered
-        // unconditionally rather than under is_admin()/!is_admin(), because it
-        // serves both the frontend inventory search and the admin Inventory
-        // list table; it no-ops on any query that has not opted in.
+        // Extends opted-in searches to Stock Number, HIN and Boat Type.
         add_filter('posts_search', [__CLASS__, 'search_stock_and_hin'], 10, 2);
 
         add_action('wp_ajax_reveal_price', [__CLASS__, 'reveal_price']);
@@ -78,18 +39,18 @@ class AJAX_Handlers {
         add_action('wp_ajax_record_favorite', [__CLASS__, 'record_favorite']);
         add_action('wp_ajax_nopriv_record_favorite', [__CLASS__, 'record_favorite']);
 
-        // Admin AJAX actions
+        // Admin actions.
         add_action('wp_ajax_start_inventory_sync', [__CLASS__, 'start_inventory_sync']);
         add_action('wp_ajax_run_inventory_sync', [__CLASS__, 'run_inventory_sync']);
         add_action('wp_ajax_get_sync_logs', [__CLASS__, 'get_sync_logs']);
     }
 
     /**
-     * Starts the inventory sync process in the background.
+     * Starts an inventory sync in the background.
      *
-     * This function is triggered by an AJAX request from the admin sync page.
-     * It initiates a non-blocking request to the server to run the actual sync,
-     * allowing the admin page to remain responsive.
+     * Clears the recent logs and fires a non-blocking request to run_inventory_sync.
+     *
+     * @return void
      */
     public static function start_inventory_sync() {
         check_ajax_referer('dealers_choice_sync_nonce', 'nonce');
@@ -97,12 +58,10 @@ class AJAX_Handlers {
             wp_send_json_error(['message' => 'Permission denied.'], 403);
         }
 
-        // Clear previous logs before starting a new sync
         update_option('dealers_choice_recent_logs', []);
 
         $force_sync = isset($_POST['force_sync']) && $_POST['force_sync'] === 'true';
 
-        // Use a non-blocking request to run the sync in the background
         $url = admin_url('admin-ajax.php');
         $args = [
             'method' => 'POST',
@@ -125,6 +84,11 @@ class AJAX_Handlers {
         }
     }
 
+    /**
+     * Returns the formatted price for a published boat.
+     *
+     * @return void
+     */
     public static function reveal_price() {
         check_ajax_referer('dealerschoice_reveal_price_nonce', 'nonce');
     
@@ -134,8 +98,6 @@ class AJAX_Handlers {
             wp_send_json_error(['message' => 'No inventory ID provided.'], 400);
         }
 
-        // Shared with the Reveal Price form hook so the stored price matches what is displayed.
-        // Only returns a price for published boats.
         $formatted_price = dealers_choice_get_revealable_price($inventoryID);
 
         if ($formatted_price !== '') {
@@ -146,16 +108,14 @@ class AJAX_Handlers {
     }
 
     /**
-     * Record a favorite add/remove event to the analytics table.
+     * Records a favorite add or remove event in the analytics table.
      *
-     * Fires for both logged-in and logged-out users. Silently succeeds or fails;
-     * the user-facing favorites UI is unaffected by this call.
+     * @return void
      */
     public static function record_favorite() {
         check_ajax_referer('dealerschoice_record_favorite_nonce', 'nonce');
 
-        // Only record when favorites are enabled
-        if ( get_option('dealers_choice_show_favorites', '1') !== '1' ) {
+        if ( ! dealerschoiceIsFavoritesEnabled() ) {
             wp_send_json_success();
         }
 
@@ -185,10 +145,9 @@ class AJAX_Handlers {
     }
 
     /**
-     * Executes the actual inventory sync.
+     * Runs the inventory sync requested by start_inventory_sync().
      *
-     * This is triggered by the non-blocking request from start_inventory_sync.
-     * It runs the full inventory synchronization process.
+     * @return void
      */
     public static function run_inventory_sync() {
         if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'dealers_choice_run_sync_nonce')) {
@@ -215,10 +174,9 @@ class AJAX_Handlers {
     }
 
     /**
-     * Retrieves recent sync logs for the admin interface.
+     * Returns recent sync logs and whether a sync is in progress.
      *
-     * This AJAX endpoint allows the admin page to poll for log updates
-     * during an active sync process.
+     * @return void
      */
     public static function get_sync_logs() {
         check_ajax_referer('dealers_choice_sync_nonce', 'nonce');
@@ -230,92 +188,153 @@ class AJAX_Handlers {
         $sync_lock = get_transient('dealers_choice_inventory_sync_lock');
 
         wp_send_json_success([
-            'logs' => array_reverse($logs), // Show most recent first
+            'logs' => array_reverse($logs),
             'sync_in_progress' => !empty($sync_lock),
         ]);
     }
     
     /**
-     * Main inventory search/filter handler
-     * 
-     * Processes filter selections, search queries, sorting, and pagination
-     * to return matching boats.
+     * Handles inventory filter, search, sort and pagination requests.
+     *
+     * Sends the output of render_inventory_results() as JSON.
+     *
+     * @return void
      */
     public static function search_inventory() {
-        // Allow cross-origin requests. This is public, read-only inventory
-        // data, so '*' is acceptable and keeps iframe/third-party embeds
-        // working. Credentials are deliberately NOT allowed: browsers reject
-        // 'Allow-Credentials: true' with a '*' origin anyway, and nothing here
-        // needs the visitor's cookies or an Authorization header.
+        // Allow cross-origin requests without credentials.
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Methods: POST, OPTIONS');
         header('Access-Control-Allow-Headers: Content-Type, X-Requested-With');
 
-        // Handle preflight OPTIONS request from the browser
+        // Preflight request.
         if ('OPTIONS' == $_SERVER['REQUEST_METHOD']) {
             status_header(200);
             exit();
         }
 
-        // Get filter data from AJAX request
-        // Allowlisted keys and sanitized slugs/IDs only; see sanitize_filters().
         $filters = self::sanitize_filters(isset($_POST['filters']) ? $_POST['filters'] : []);
         $sort_by = isset($_POST['sortBy']) ? sanitize_text_field(wp_unslash($_POST['sortBy'])) : get_option('dealers_choice_default_sort', 'date-desc');
         $search_query = isset($_POST['query']) ? sanitize_text_field(wp_unslash($_POST['query'])) : '';
-        // Keyword search runs several LIKE '%...%' clauses; an unbounded
-        // string only makes that slower.
+        // Limit the keyword to 100 characters.
         $search_query = mb_substr($search_query, 0, 100);
         $current_page = isset($_POST['currentPage']) ? max(1, absint($_POST['currentPage'])) : 1;
-        $posts_per_page = isset($_POST['postsPerPage']) && absint($_POST['postsPerPage']) > 0
-            ? absint($_POST['postsPerPage'])
-            : apply_filters('dealerschoice_posts_per_page', 12);
+        $posts_per_page = self::get_posts_per_page(isset($_POST['postsPerPage']) ? $_POST['postsPerPage'] : 0);
 
-        // Cap page size so a single public request can't render the whole
-        // inventory. Raise via the filter if a site genuinely needs more.
-        $max_posts_per_page = max(1, (int) apply_filters('dealerschoice_max_posts_per_page', 60));
-        $posts_per_page = min($posts_per_page, $max_posts_per_page);
-
-        // Locked taxonomy constraints declared by the shortcode (see the
-        // 'lock' attribute on [dealerschoice_inventory]). These are kept
-        // separate from $filters on purpose: $filters mirrors the visitor's
-        // checkbox state and is wiped by "Clear All Filters", whereas locked
-        // constraints must survive every filter, search, sort and pagination
-        // request so a scoped page stays scoped.
+        // Locked taxonomy constraints from the shortcode, kept separate from the visitor's filters.
         $locked = self::sanitize_locked_constraints(isset($_POST['locked']) ? $_POST['locked'] : []);
 
-        // Build query args using helper
+        // Listing page URL, used for pagination hrefs and the ItemList schema url.
+        $page_url = self::sanitize_page_url(isset($_POST['pageUrl']) ? $_POST['pageUrl'] : '');
+
+        wp_send_json_success(
+            self::render_inventory_results($filters, $search_query, $sort_by, $current_page, $posts_per_page, $locked, $page_url)
+        );
+    }
+
+    /**
+     * Resolves the page size for an inventory request.
+     *
+     * Applies the dealerschoice_posts_per_page default and the
+     * dealerschoice_max_posts_per_page cap (60).
+     *
+     * @param mixed $requested Optional. Requested page size. 0 or empty uses the default. Default 0.
+     * @return int Page size, at least 1.
+     */
+    public static function get_posts_per_page($requested = 0) {
+        $posts_per_page = absint($requested) > 0
+            ? absint($requested)
+            : absint(apply_filters('dealerschoice_posts_per_page', 12));
+
+        $max_posts_per_page = max(1, (int) apply_filters('dealerschoice_max_posts_per_page', 60));
+
+        return max(1, min($posts_per_page, $max_posts_per_page));
+    }
+
+    /**
+     * Validates a listing page URL sent with an AJAX request.
+     *
+     * Accepts only http(s) URLs on this site's host and strips any fragment.
+     *
+     * @param mixed $raw Requested URL.
+     * @return string Sanitized URL, or an empty string when invalid.
+     */
+    public static function sanitize_page_url($raw) {
+        if (!is_string($raw) || $raw === '') {
+            return '';
+        }
+
+        $url = esc_url_raw(wp_unslash($raw), ['http', 'https']);
+
+        if ($url === '') {
+            return '';
+        }
+
+        $url_host  = wp_parse_url($url, PHP_URL_HOST);
+        $home_host = wp_parse_url(home_url(), PHP_URL_HOST);
+
+        if (!$url_host || !$home_host || strtolower($url_host) !== strtolower($home_host)) {
+            return '';
+        }
+
+        $hash_pos = strpos($url, '#');
+
+        return $hash_pos === false ? $url : substr($url, 0, $hash_pos);
+    }
+
+    /**
+     * Queries and renders one page of inventory results.
+     *
+     * Used by search_inventory() and by the inventory shortcode's server-rendered
+     * first page. Builds the result cards, pagination, the optional
+     * "Shop Other Locations" block and the ItemList schema from the same query.
+     *
+     * @param array  $filters        Output of sanitize_filters().
+     * @param string $search_query   Sanitized keyword search.
+     * @param string $sort_by        Sort option (see add_sorting_args()).
+     * @param int    $current_page   Page number, 1 or greater.
+     * @param int    $posts_per_page Output of get_posts_per_page().
+     * @param array  $locked         Output of sanitize_locked_constraints().
+     * @param string $page_url       Optional. Listing page URL. Default empty.
+     * @return array{results:string,pagination:string,other_locations:string,total:int,pages:int,schema:array|null}
+     */
+    public static function render_inventory_results($filters, $search_query, $sort_by, $current_page, $posts_per_page, $locked, $page_url = '') {
         $args = self::build_inventory_query_args($filters, $search_query, $sort_by, $current_page, $posts_per_page, $locked);
-        
-        // Execute query
+
         $query = new \WP_Query($args);
-        
-        // Build results HTML
+
+        // ItemList schema for the rendered boats, skipped for the favorites request.
+        $build_schema = empty($filters['id']);
+        $list_items = [];
+
         $results_html = '';
         if ($query->have_posts()) {
             while ($query->have_posts()) {
                 $query->the_post();
                 $results_html .= Template_Loader::get_template('inventory-block.php', [], true);
+
+                if ($build_schema) {
+                    $boat = new Boat(get_the_ID());
+                    $list_items[] = [
+                        '@type'    => 'ListItem',
+                        'position' => count($list_items) + 1,
+                        'item'     => $boat->getItemListEntry(),
+                    ];
+                }
             }
             wp_reset_postdata();
         } else {
-            // Get no results message
             $no_results_msg = self::get_no_results_html($search_query, $filters);
 
-            // Get suggestions (still bound by any locked constraints, so a
-            // page scoped to a promotion never suggests boats outside it)
+            // Suggestions stay within the locked constraints.
             $suggestions = self::get_suggestions_html($filters, $locked);
             
             $results_html = $no_results_msg . $suggestions;
         }
         
-        // Build pagination HTML
-        $pagination_html = self::build_pagination($query, $current_page);
+        $pagination_html = self::build_pagination($query, $current_page, $page_url);
 
-        // "Shop Other Locations": on a location-locked page, once the visitor
-        // has filtered or searched and reached the last page of local results,
-        // offer matching boats from the dealer's other locations. Returned
-        // separately from 'results' so the JS can render it below pagination.
-        // Zero local results are left to the existing suggestions block.
+        // "Shop Other Locations": on a location-locked page, after a filter or search,
+        // shows matching boats from other locations on the last page of results.
         $other_locations_html = '';
         if (
             get_option('dealerschoice_show_other_locations', '0') === '1'
@@ -328,21 +347,36 @@ class AJAX_Handlers {
             $other_locations_html = self::get_other_locations_html($filters, $search_query, $sort_by, $locked);
         }
 
-        // Return JSON response
-        wp_send_json_success([
+        $schema = null;
+        if (!empty($list_items)) {
+            $schema = [
+                '@context' => 'https://schema.org',
+                '@type' => 'ItemList',
+            ];
+            if ($page_url !== '') {
+                $schema['url'] = $page_url;
+            }
+            // Positions and numberOfItems are per page.
+            $schema['numberOfItems'] = count($list_items);
+            $schema['itemListElement'] = $list_items;
+        }
+
+        return [
             'results' => $results_html,
             'pagination' => $pagination_html,
             'other_locations' => $other_locations_html,
-            'total' => $query->found_posts,
-            'pages' => $query->max_num_pages
-        ]);
+            'total' => (int) $query->found_posts,
+            'pages' => (int) $query->max_num_pages,
+            'schema' => $schema,
+        ];
     }
     
     /**
-     * Add sorting arguments to WP_Query args
-     * 
-     * @param array $args WP_Query arguments (passed by reference)
-     * @param string $sort_by Sort option
+     * Adds orderby, order and meta_key arguments for a sort option.
+     *
+     * @param array  $args    WP_Query arguments, modified by reference.
+     * @param string $sort_by Sort option, e.g. 'price-asc'. Unknown values sort by date descending.
+     * @return void
      */
     private static function add_sorting_args(&$args, $sort_by) {
         switch ($sort_by) {
@@ -406,51 +440,64 @@ class AJAX_Handlers {
     }
     
     /**
-     * Build pagination HTML
-     * 
-     * @param \WP_Query $query Query object
-     * @param int $current_page Current page number
-     * @return string Pagination HTML
+     * Builds the pagination nav.
+     *
+     * Links use ?inventory_page=N on the listing page URL and carry data-page for the JS handler.
+     *
+     * @param \WP_Query $query        Inventory query.
+     * @param int       $current_page Current page number.
+     * @param string    $page_url     Optional. Listing page URL. Empty uses href="#". Default empty.
+     * @return string Pagination HTML, or an empty string for a single page.
      */
-    private static function build_pagination($query, $current_page) {
+    private static function build_pagination($query, $current_page, $page_url = '') {
         if ($query->max_num_pages <= 1) {
             return '';
         }
+
+        $page_href = function($page) use ($page_url) {
+            if ($page_url === '') {
+                return '#';
+            }
+            return $page > 1
+                ? add_query_arg('inventory_page', $page, $page_url)
+                : remove_query_arg('inventory_page', $page_url);
+        };
         
         $html = '<nav class="pagination" aria-label="Inventory Pagination">';
         $html .= '<ul class="pagination-list">';
         
-        // Previous button
         if ($current_page > 1) {
             $html .= sprintf(
-                '<li><a href="#" data-page="%d" class="pagination-prev" aria-label="Previous Page"><i class="fa-light fa-angle-left"></i>Previous</a></li>',
+                '<li><a href="%s" data-page="%d" class="pagination-prev" aria-label="Previous Page"><i class="fa-light fa-angle-left" aria-hidden="true"></i>Previous</a></li>',
+                esc_url($page_href($current_page - 1)),
                 $current_page - 1
             );
         }
         
-        // Page numbers
-        $range = 2; // Show 2 pages on each side of current page
+        // Pages shown on each side of the current page.
+        $range = 2;
         
         for ($i = 1; $i <= $query->max_num_pages; $i++) {
-            // Always show first page, last page, and pages around current
+            // First page, last page, and pages around the current one.
             if ($i == 1 || $i == $query->max_num_pages || ($i >= $current_page - $range && $i <= $current_page + $range)) {
-                $active_class = $i == $current_page ? ' class="active"' : '';
+                $is_current = $i == $current_page;
                 $html .= sprintf(
-                    '<li%s><a href="#" data-page="%d">%d</a></li>',
-                    $active_class,
+                    '<li%s><a href="%s" data-page="%d"%s>%d</a></li>',
+                    $is_current ? ' class="active"' : '',
+                    esc_url($page_href($i)),
                     $i,
+                    $is_current ? ' aria-current="page"' : '',
                     $i
                 );
             } elseif ($i == $current_page - $range - 1 || $i == $current_page + $range + 1) {
-                // Show ellipsis
                 $html .= '<li class="pagination-ellipsis"><span>...</span></li>';
             }
         }
         
-        // Next button
         if ($current_page < $query->max_num_pages) {
             $html .= sprintf(
-                '<li><a href="#" data-page="%d" class="pagination-next" aria-label="Next Page">Next<i class="fa-light fa-angle-right"></i></a></li>',
+                '<li><a href="%s" data-page="%d" class="pagination-next" aria-label="Next Page">Next<i class="fa-light fa-angle-right" aria-hidden="true"></i></a></li>',
+                esc_url($page_href($current_page + 1)),
                 $current_page + 1
             );
         }
@@ -462,11 +509,11 @@ class AJAX_Handlers {
     }
     
     /**
-     * Get no results HTML
-     * 
-     * @param string $search_query Current search query
-     * @param array $filters Current filters
-     * @return string No results HTML
+     * Builds the "No Boats Found" message.
+     *
+     * @param string $search_query Current search query.
+     * @param array  $filters      Current filters.
+     * @return string No results HTML.
      */
     private static function get_no_results_html($search_query, $filters) {
         $has_filters = self::has_active_filters($filters);
@@ -487,13 +534,9 @@ class AJAX_Handlers {
     }
 
     /**
-     * Does the visitor have at least one real filter selected?
+     * Checks whether the visitor has selected at least one filter value other than 'all'.
      *
-     * 'all' placeholder values don't count. Locked constraints are not part
-     * of $filters (the JS strips them), so a scoped page with nothing chosen
-     * by the visitor returns false.
-     *
-     * @param array $filters Current filters
+     * @param array $filters Current filters.
      * @return bool
      */
     private static function has_active_filters($filters) {
@@ -516,18 +559,16 @@ class AJAX_Handlers {
     }
 
     /**
-     * Build the "Shop Other Locations" block.
+     * Builds the "Shop Other Locations" block.
      *
-     * Runs the visitor's exact filters and search against every location
-     * except the locked one(s), keeping any other locked constraints (so a
-     * page locked to location + condition="new" still only suggests new
-     * boats). No relaxation: if nothing matches exactly, nothing renders.
+     * Runs the visitor's filters and search against every location except the
+     * locked ones, keeping all other locked constraints. Returns up to 3 boats.
      *
-     * @param array  $filters      Visitor filter selections
-     * @param string $search_query Search keyword
-     * @param string $sort_by      Current sort order
-     * @param array  $locked       Sanitised locked constraints, must include 'location'
-     * @return string HTML content, or '' when there are no matches
+     * @param array  $filters      Visitor filter selections.
+     * @param string $search_query Search keyword.
+     * @param string $sort_by      Current sort option.
+     * @param array  $locked       Sanitized locked constraints, including 'location'.
+     * @return string Block HTML, or an empty string when nothing matches.
      */
     private static function get_other_locations_html($filters, $search_query, $sort_by, $locked) {
         $excluded_locations = $locked['location'];
@@ -535,8 +576,7 @@ class AJAX_Handlers {
         $other_locked = $locked;
         unset($other_locked['location']);
 
-        // Any visitor-chosen location would AND against the exclusion below
-        // and could only ever narrow to zero, so drop it.
+        // Drop the visitor's location filter.
         $other_filters = is_array($filters) ? $filters : [];
         unset($other_filters['location']);
 
@@ -590,10 +630,9 @@ class AJAX_Handlers {
     }
 
     /**
-     * "Shop Other Locations" heading from Settings, falling back to
-     * get_default_other_locations_heading() when the dealer hasn't set one.
+     * Returns the "Shop Other Locations" heading, or the default when blank.
      *
-     * @return string Plain text - escape with esc_html() on output.
+     * @return string Plain text.
      */
     public static function get_other_locations_heading() {
         $heading = (string) get_option('dealerschoice_other_locations_heading', '');
@@ -602,26 +641,20 @@ class AJAX_Handlers {
     }
 
     /**
-     * "Shop Other Locations" intro text from Settings.
+     * Returns the "Shop Other Locations" intro text.
      *
-     * Unlike the heading, the intro is optional: the default is used only
-     * until Settings is first saved, after which a blank value is stored and
-     * the intro is not output at all.
+     * Uses the default only when the option has never been saved.
      *
-     * @return string May contain basic HTML (saved via wp_kses_post) - escape
-     *                on output with wp_kses_post(), not esc_html(). '' means
-     *                "no intro".
+     * @return string Intro text that may contain basic HTML, or an empty string for no intro.
      */
     public static function get_other_locations_intro() {
         return trim((string) get_option('dealerschoice_other_locations_intro', self::get_default_other_locations_intro()));
     }
 
     /**
-     * "Shop Other Locations" view-all button text from Settings, falling back
-     * to get_default_other_locations_button_text() when blank. Never empty,
-     * because it is the link's accessible name.
+     * Returns the "Shop Other Locations" button text, or the default when blank.
      *
-     * @return string Plain text - escape with esc_html() on output.
+     * @return string Plain text.
      */
     public static function get_other_locations_button_text() {
         $text = (string) get_option('dealerschoice_other_locations_button_text', '');
@@ -630,8 +663,7 @@ class AJAX_Handlers {
     }
 
     /**
-     * Default text for the "Shop Other Locations" view-all button. Also used
-     * by the admin settings page so the default copy only lives in one place.
+     * Returns the default "Shop Other Locations" button text.
      *
      * @return string
      */
@@ -640,10 +672,7 @@ class AJAX_Handlers {
     }
 
     /**
-     * Default heading for the "Shop Other Locations" block. Also used by the
-     * admin settings page so the default copy only lives in one place. The
-     * heading is required (it labels the block's <section> for assistive
-     * tech), so a blank setting always falls back to this.
+     * Returns the default "Shop Other Locations" heading.
      *
      * @return string
      */
@@ -652,9 +681,7 @@ class AJAX_Handlers {
     }
 
     /**
-     * Default intro text for the "Shop Other Locations" block, shown until
-     * the dealer saves Settings. Also used by the admin settings page so the
-     * default copy only lives in one place.
+     * Returns the default "Shop Other Locations" intro text.
      *
      * @return string
      */
@@ -663,16 +690,14 @@ class AJAX_Handlers {
     }
 
     /**
-     * Link to the site-wide inventory page with the visitor's filters preset.
+     * Builds a link to the inventory page with the visitor's filters and search preset.
      *
-     * Uses the URL parameters the inventory JS reads on load (key[]=slug, and
-     * boat_year for year since ?year= is a WordPress reserved query var).
-     * Keys are allowlisted against the filter map and every value is forced
-     * through sanitize_title(). Capacity has no URL parameter and is skipped.
+     * Uses the URL parameters the inventory JS reads on load (key[]=slug, boat_year
+     * for year, q for search). Capacity has no URL parameter and is skipped.
      *
-     * @param array  $filters      Visitor filter selections (location already removed)
-     * @param string $search_query Search keyword
-     * @return string URL, or '' when no inventory page URL can be resolved
+     * @param array  $filters      Visitor filter selections, without location.
+     * @param string $search_query Search keyword.
+     * @return string URL, or an empty string when no inventory page URL can be resolved.
      */
     private static function get_other_locations_view_all_url($filters, $search_query) {
         if (!function_exists('dealers_choice_get_inventory_page_url')) {
@@ -724,8 +749,7 @@ class AJAX_Handlers {
             $params['q'] = $search_query;
         }
 
-        // http_build_query() emits key[0]=a&key[1]=b; the JS only matches
-        // key[] or key, so build the array params by hand.
+        // Build key[]=value pairs by hand.
         $query_parts = [];
         foreach ($params as $param => $value) {
             if (is_array($value)) {
@@ -745,15 +769,13 @@ class AJAX_Handlers {
     }
 
     /**
-     * Get updated filter counts based on current selections
-     * 
-     * This allows dynamic updating of filter counts as user selects/deselects filters
+     * Returns term counts for every filter taxonomy given the current selections.
+     *
+     * Request keys are taxonomy names, allowlisted against get_filter_taxonomy_map().
+     *
+     * @return void
      */
     public static function get_filter_counts() {
-        // Public and unauthenticated. DC\Inventory expects keys that are
-        // taxonomy names (not the AJAX filter keys), so allowlist against the
-        // taxonomies the sidebar can filter by and sanitize every slug.
-        // DC\Inventory::sanitizeTaxArgs() re-validates before any SQL runs.
         $raw_filters        = isset($_POST['filters']) && is_array($_POST['filters']) ? wp_unslash($_POST['filters']) : [];
         $allowed_taxonomies = array_values(self::get_filter_taxonomy_map());
         $filters            = [];
@@ -783,7 +805,6 @@ class AJAX_Handlers {
             }
         }
 
-        // Get updated counts
         $counts = [
             'locations' => \DC\Inventory::getTaxonomyValuesForLocation($filters),
             'conditions' => \DC\Inventory::getTaxonomyValuesForCondition($filters),
@@ -802,26 +823,14 @@ class AJAX_Handlers {
     }
 
     /**
-     * Extend WP's default search WHERE clause to also match extra postmeta
-     * keys (Stock Number, HIN) and taxonomy term names (e.g. Boat Type), so
-     * salespeople and visitors can pull up a listing by any of those values,
-     * in addition to the existing title/content search.
+     * Extends the search WHERE clause to match extra meta values and term names.
      *
-     * Only applies to queries that set the 'dc_search_extra_meta_keys' and/or
-     * 'dc_search_extra_taxonomies' args, so other searches on the site are
-     * unaffected. Two callers opt in: build_inventory_query_args() below for
-     * the frontend inventory search, and
-     * dealers_choice_admin_search_stock_and_hin() in dealers-choice.php for the
-     * Inventory list table in the admin.
+     * Applies only to queries that set 'dc_search_extra_meta_keys' and/or
+     * 'dc_search_extra_taxonomies'. ORs EXISTS subqueries into the first
+     * "AND (...)" group and keeps any trailing clauses unchanged.
      *
-     * @param string $search WP's generated search WHERE clause, e.g.
-     *                       " AND (title/content match) " when logged in, or
-     *                       " AND (title/content match) AND (post_password = '') "
-     *                       when logged out (core appends the password check
-     *                       as a separate trailing AND clause for anonymous
-     *                       visitors). Only the first group is our target;
-     *                       any trailing clause must be preserved untouched.
-     * @param \WP_Query $query Current query.
+     * @param string    $search Search WHERE clause generated by WP_Query.
+     * @param \WP_Query $query  Current query.
      * @return string Modified WHERE clause.
      */
     public static function search_stock_and_hin($search, $query) {
@@ -835,12 +844,7 @@ class AJAX_Handlers {
             return $search;
         }
 
-        // Isolate only the first "AND (...)" group (the title/content
-        // match) with a recursive balanced-paren match, rather than
-        // assuming $search has exactly one such group. This keeps any
-        // trailing clause core adds (like the logged-out post_password
-        // check above) untouched instead of being swallowed by a greedy
-        // ".*" and ANDed with our EXISTS check instead of ORed.
+        // Match the first balanced "AND (...)" group; the rest is kept as the tail.
         if (!preg_match('/^\s*AND\s*(\((?:[^()]++|(?1))*+\))\s*(.*)$/s', $search, $matches)) {
             return $search;
         }
@@ -880,18 +884,12 @@ class AJAX_Handlers {
     }
 
     /**
-     * Map of sidebar filter keys to the taxonomy each one queries.
+     * Returns the map of visitor filter keys to taxonomy names.
      *
-     * These are the taxonomies the visitor can filter by from the inventory
-     * sidebar. The array key is the token used in the AJAX payload and in
-     * shortcode attributes; the value is the registered taxonomy name.
+     * Keys are the tokens used in the AJAX payload and shortcode attributes.
+     * Filterable via dealerschoice_filter_taxonomy_map.
      *
-     * This is the narrower of the two maps. A taxonomy listed here gets a
-     * filter widget in templates/filters.php and appears in the term counts.
-     * For a taxonomy that should scope a listing WITHOUT becoming a visitor
-     * filter (promotions, for example), use get_lockable_taxonomy_map().
-     *
-     * @return array<string,string> filter key => taxonomy name
+     * @return array<string,string> Filter key => taxonomy name.
      */
     public static function get_filter_taxonomy_map() {
         return apply_filters('dealerschoice_filter_taxonomy_map', [
@@ -910,23 +908,12 @@ class AJAX_Handlers {
     }
 
     /**
-     * Map of keys that may be used as a locked constraint.
+     * Returns the map of lockable constraint keys to taxonomy names.
      *
-     * A superset of get_filter_taxonomy_map(): everything the visitor can
-     * filter by can also be locked, plus taxonomies that exist purely to
-     * scope a listing and deliberately have no filter widget.
+     * The filter map plus 'promotion' => 'dc_promotions'. Filterable via
+     * dealerschoice_lockable_taxonomy_map.
      *
-     * 'promotion' => 'dc_promotions' is the reason this map exists. Promotions
-     * are dealer-curated merchandising flags (Featured, Clearance, or whatever
-     * that dealer's marketing calls them) used to build a homepage slider or a
-     * dedicated promotion page. They must never appear as a checkbox in the
-     * filter sidebar, so they are absent from the filter map, but they must be
-     * reachable from a shortcode, so they are present here.
-     *
-     * This map is also the allowlist for untrusted request data. Anything not
-     * listed is rejected by sanitize_locked_constraints().
-     *
-     * @return array<string,string> lock key => taxonomy name
+     * @return array<string,string> Lock key => taxonomy name.
      */
     public static function get_lockable_taxonomy_map() {
         $map = self::get_filter_taxonomy_map();
@@ -937,23 +924,14 @@ class AJAX_Handlers {
     }
 
     /**
-     * Validate an untrusted set of locked taxonomy constraints.
+     * Validates locked taxonomy constraints.
      *
-     * Accepts the raw ['lock_key' => ['slug', ...]] shape that arrives from
-     * the AJAX request or from a shortcode attribute and returns only the
-     * parts that are safe to query:
+     * Keeps keys in get_lockable_taxonomy_map() whose taxonomy is registered and
+     * passes each term through sanitize_title(). Empty and 'all' values are
+     * dropped; slugs that match no term are kept.
      *
-     * - the key must exist in get_lockable_taxonomy_map()
-     * - the mapped taxonomy must actually be registered
-     * - every term is forced through sanitize_title()
-     *
-     * A slug that doesn't resolve to a real term is deliberately left in
-     * place rather than dropped, so a typo yields an empty result set instead
-     * of silently widening the query to the whole catalogue. Never build a
-     * tax_query from request data without running it through here.
-     *
-     * @param mixed $raw Untrusted input.
-     * @return array<string,array<int,string>> Sanitised constraints.
+     * @param mixed $raw Constraints as ['lock_key' => ['slug', ...]].
+     * @return array<string,array<int,string>> Sanitized constraints.
      */
     public static function sanitize_locked_constraints($raw) {
         $clean = [];
@@ -997,23 +975,14 @@ class AJAX_Handlers {
     }
 
     /**
-     * Validate the visitor's untrusted filter selections.
+     * Validates the visitor's filter selections.
      *
-     * Same idea as sanitize_locked_constraints(), but for the changeable
-     * sidebar filters:
+     * Keeps keys in get_filter_taxonomy_map() and passes each slug through
+     * sanitize_title(). The 'id' key (favorites) is passed through absint() and
+     * capped by dealerschoice_max_favorite_ids (default 100). 'all' values are kept.
      *
-     * - keys must exist in get_filter_taxonomy_map() (promotions and other
-     *   lock-only taxonomies are not visitor filters), plus 'id' for the
-     *   favorites request
-     * - every slug is forced through sanitize_title(); nested arrays dropped
-     * - 'id' values go through absint() and are capped at
-     *   'dealerschoice_max_favorite_ids' (default 100)
-     *
-     * 'all' is kept as-is because build_inventory_query_args() and
-     * has_active_filters() already treat it as "no selection".
-     *
-     * @param mixed $raw Untrusted input.
-     * @return array<string,array<int,string|int>> Sanitised filters.
+     * @param mixed $raw Filters as ['filter_key' => ['slug', ...]].
+     * @return array<string,array<int,string|int>> Sanitized filters.
      */
     public static function sanitize_filters($raw) {
         $clean = [];
@@ -1075,18 +1044,19 @@ class AJAX_Handlers {
     }
 
     /**
-     * Build WP_Query arguments based on filters and search parameters
+     * Builds WP_Query arguments for the inventory listing.
      *
-     * @param array $filters Filter selections
-     * @param string $search_query Search keyword
-     * @param string $sort_by Sort order
-     * @param int $paged Page number
-     * @param int $posts_per_page Posts per page
-     * @param array $locked Locked taxonomy constraints, already validated by
-     *                      sanitize_locked_constraints(). ANDed onto the query
-     *                      after the visitor's own filters and applied even in
-     *                      the favorites/post__in branch.
-     * @return array WP_Query arguments
+     * A favorites request ('id' filter) queries those IDs in order and ignores
+     * other filters and search. Locked constraints are ANDed onto every query,
+     * and boats flagged do_not_show_on_public_website are excluded.
+     *
+     * @param array  $filters        Filter selections.
+     * @param string $search_query   Optional. Search keyword. Default empty.
+     * @param string $sort_by        Optional. Sort option. Default 'date-desc'.
+     * @param int    $paged          Optional. Page number. Default 1.
+     * @param int    $posts_per_page Optional. Posts per page. Default 12.
+     * @param array  $locked         Optional. Output of sanitize_locked_constraints(). Default empty.
+     * @return array WP_Query arguments.
      */
     private static function build_inventory_query_args($filters, $search_query = '', $sort_by = 'date-desc', $paged = 1, $posts_per_page = 12, $locked = []) {
         $args = [
@@ -1096,42 +1066,28 @@ class AJAX_Handlers {
             'paged' => $paged,
         ];
 
-        // Two maps, deliberately: the visitor may only filter by what has a
-        // sidebar widget, but a shortcode may lock onto anything lockable
-        // (which includes dc_promotions, a scoping-only taxonomy).
         $taxonomy_map = self::get_filter_taxonomy_map();
         $lockable_map = self::get_lockable_taxonomy_map();
 
-        // Built here rather than inside the else branch so locked constraints
-        // can be appended regardless of which branch runs.
         $tax_query = ['relation' => 'AND'];
 
-        // If filtering by post IDs (for favorites), override other filters
+        // Favorites: query by post ID, preserving the given order.
         if (!empty($filters['id']) && is_array($filters['id'])) {
-            // Sanitize IDs
             $ids = array_map('intval', array_filter($filters['id'], function($id) { return $id !== '' && $id !== null; }));
             if (!empty($ids)) {
                 $args['post__in'] = $ids;
-                // To preserve order of IDs as in favorites, use 'orderby' => 'post__in'
                 $args['orderby'] = 'post__in';
-                // No need for tax_query or search
             }
         } else {
-            // Add search query
             if (!empty($search_query)) {
                 $args['s'] = $search_query;
-                // Flags consumed by search_stock_and_hin() so the search also
-                // matches these ACF fields and the Boat Type taxonomy term
-                // name, not just post title/content (post titles never
-                // contain the boat type, so free-text search wouldn't
-                // otherwise find e.g. "pontoon").
+                // Also match Stock Number, HIN and Boat Type via search_stock_and_hin().
                 $args['dc_search_extra_meta_keys'] = ['boat_stock_number', 'boat_hin'];
                 $args['dc_search_extra_taxonomies'] = ['boat_type'];
             }
 
             foreach ($taxonomy_map as $filter_key => $taxonomy) {
                 if (!empty($filters[$filter_key]) && is_array($filters[$filter_key])) {
-                    // Remove 'all' option if present
                     $filter_values = array_filter($filters[$filter_key], function($val) {
                         return $val !== 'all';
                     });
@@ -1148,8 +1104,7 @@ class AJAX_Handlers {
             }
         }
 
-        // Locked constraints. Appended last and outside the branch above so
-        // they cannot be cleared, overridden or escaped from the client.
+        // Locked constraints apply to both branches.
         foreach ($locked as $lock_key => $terms) {
             if (!isset($lockable_map[$lock_key]) || empty($terms)) {
                 continue;
@@ -1167,7 +1122,7 @@ class AJAX_Handlers {
             $args['tax_query'] = $tax_query;
         }
 
-        // Exclude boats marked to not show on public website
+        // Exclude boats hidden from the public website.
         $args['meta_query'] = [
             'relation' => 'OR',
             [
@@ -1181,19 +1136,20 @@ class AJAX_Handlers {
             ]
         ];
         
-        // Add sorting
         self::add_sorting_args($args, $sort_by);
         
         return $args;
     }
 
     /**
-     * Get suggestions query based on relaxed filters
-     * 
-     * @param array $filters Current filters
-     * @param array $locked Locked constraints to keep applied while relaxing
-     *                      the visitor's own filters.
-     * @return \WP_Query|null Query or null if no appropriate strategy found
+     * Queries up to 3 suggested boats by relaxing the visitor's filters.
+     *
+     * Tries Make + Model, then Make (+ Category), then Category, then Make alone.
+     * Locked constraints are always kept.
+     *
+     * @param array $filters Current filters.
+     * @param array $locked  Optional. Locked constraints. Default empty.
+     * @return \WP_Query|null Query with results, or null when no strategy matches.
      */
     private static function get_suggestions_query($filters, $locked = []) {
         $has_filter = function($key) use ($filters) {
@@ -1208,13 +1164,13 @@ class AJAX_Handlers {
         $relaxed_filters = [];
         $found_strategy = false;
         
-        // 1. Make + Model -> Drop Year/Price/etc, Keep Make+Model
+        // Make + Model.
         if ($has_filter('make') && $has_filter('model')) {
             $relaxed_filters['make'] = $filters['make'];
             $relaxed_filters['model'] = $filters['model'];
             $found_strategy = true;
         } 
-        // 2. Make -> Drop Model/Year, Keep Make (+ Category if present)
+        // Make, plus Category if set.
         elseif ($has_filter('make')) {
             $relaxed_filters['make'] = $filters['make'];
             if ($has_filter('category')) {
@@ -1222,7 +1178,7 @@ class AJAX_Handlers {
             }
             $found_strategy = true;
         }
-        // 3. Category -> Drop Length/Price, Keep Category
+        // Category.
         elseif ($has_filter('category')) {
             $relaxed_filters['category'] = $filters['category'];
             $found_strategy = true;
@@ -1234,10 +1190,8 @@ class AJAX_Handlers {
             if ($query->have_posts()) return $query;
         }
 
-        // If specific Make/Model/Category strategy yielded no results (or wasn't applicable), 
-        // check if we can fall back to Make only (if we tried Make+Model or Make+Cat)
+        // Fall back to Make alone after Make + Model or Make + Category found nothing.
         if ($has_filter('make') && (isset($relaxed_filters['model']) || isset($relaxed_filters['category']))) {
-             // We tried Make+Model or Make+Cat and failed. Try just Make.
             $args = self::build_inventory_query_args(['make' => $filters['make']], '', 'date-desc', 1, 3, $locked);
             $query = new \WP_Query($args);
             if ($query->have_posts()) return $query;
@@ -1247,19 +1201,18 @@ class AJAX_Handlers {
     }
 
     /**
-     * Get suggestions HTML when no results found
-     * 
-     * @param array $filters Current filters
-     * @param array $locked Locked constraints, preserved through every
-     *                      fallback so suggestions never escape the scope of
-     *                      the page they appear on.
-     * @return string HTML content
+     * Builds the "You May Be Interested In" block shown when there are no results.
+     *
+     * Falls back to the newest boats within the locked constraints.
+     *
+     * @param array $filters Current filters.
+     * @param array $locked  Optional. Locked constraints. Default empty.
+     * @return string Block HTML, or an empty string when there are no boats.
      */
     private static function get_suggestions_html($filters, $locked = []) {
         $query = self::get_suggestions_query($filters, $locked);
 
         if (!$query || !$query->have_posts()) {
-            // Ultimate fallback: Newest boats (no filters, but still locked)
              $args = self::build_inventory_query_args([], '', 'date-desc', 1, 3, $locked);
              $query = new \WP_Query($args);
         }
@@ -1283,19 +1236,20 @@ class AJAX_Handlers {
         return ob_get_clean();
     }
 
-    // ── Boat Quiz ────────────────────────────────────────────────────────────
+    // Boat Quiz
 
     /**
-     * Handle quiz answer submission and return the rendered result HTML.
+     * Scores quiz answers and returns the rendered result HTML.
      *
      * POST params:
-     *   nonce           (string) 'dealerschoice_quiz_nonce'
      *   activity        (string) cruising|fishing|watersports|adventure
      *   crew            (string) small|medium|large
-     *   priorities      (string) priority option value (see BoatQuiz::load_config())
-     *   budget          (string) any price_range taxonomy slug (or 'any')
-     *   gravity_form_id (int)    Optional lead capture form ID from the shortcode.
-     *   boat_count      (int)    Number of matching boats to return, 1-12. Default 3.
+     *   priorities      (string) Priority option value from BoatQuiz::load_config().
+     *   budget          (string) price_range slug, or 'any'.
+     *   gravity_form_id (int)    Optional. Lead form ID.
+     *   boat_count      (int)    Optional. Boats to return, 1-12. Default 3.
+     *
+     * @return void
      */
     public static function quiz_results() {
         if ( ! check_ajax_referer( 'dealerschoice_quiz_nonce', 'nonce', false ) ) {
@@ -1305,9 +1259,7 @@ class AJAX_Handlers {
         $allowed_activity   = [ 'cruising', 'fishing', 'watersports', 'adventure' ];
         $allowed_crew        = [ 'small', 'medium', 'large' ];
 
-        // Build the allowed priorities list from the live config so that
-        // conditional_priorities option values (theme overrides) are accepted
-        // alongside the static defaults.
+        // Allowed priorities: conditional_priorities values from the config plus the defaults.
         $quiz_config        = BoatQuiz::load_config();
         $allowed_priorities = [];
 
@@ -1321,8 +1273,6 @@ class AJAX_Handlers {
             }
         }
 
-        // Always include the static fallback values so sites without a theme
-        // override continue to work without any config changes.
         $allowed_priorities = array_unique( array_merge(
             [ 'comfort', 'performance', 'fishing', 'adventure' ],
             $allowed_priorities
@@ -1333,24 +1283,22 @@ class AJAX_Handlers {
         $priorities = sanitize_text_field( wp_unslash( $_POST['priorities'] ?? '' ) );
         $budget     = sanitize_text_field( wp_unslash( $_POST['budget']     ?? '' ) );
 
-        // Validate fixed-choice fields
         if ( ! in_array( $activity,   $allowed_activity,   true ) ||
              ! in_array( $crew,       $allowed_crew,       true ) ||
              ! in_array( $priorities, $allowed_priorities, true ) ) {
             wp_send_json_error( [ 'message' => __( 'Invalid quiz answers.', 'dealerschoice' ) ], 400 );
         }
 
-        // Validate budget against actual taxonomy slugs (or 'any')
+        // Unknown budget slugs fall back to 'any'.
         if ( $budget !== 'any' && $budget !== '' ) {
             $price_term = get_term_by( 'slug', $budget, 'price_range' );
             if ( ! $price_term ) {
-                $budget = 'any'; // Graceful fallback if slug not found
+                $budget = 'any';
             }
         }
 
         $answers = compact( 'activity', 'crew', 'priorities', 'budget' );
 
-        // Score and find top match
         $match = BoatQuiz::calculate_match( $answers );
 
         if ( empty( $match['top'] ) ) {
@@ -1360,27 +1308,19 @@ class AJAX_Handlers {
         $top_term = $match['top'];
         $alt_terms = $match['alts'];
 
-        // Number of matching boats to return, set by the shortcode's boat_count
-        // attribute and posted via the quiz wrapper's data-boat-count attribute.
         $boat_count = absint( wp_unslash( $_POST['boat_count'] ?? 3 ) );
         $boat_count = min( 12, max( 1, $boat_count ?: 3 ) );
 
-        // Fetch matching boats. $boat_meta reports whether the chosen budget
-        // could actually be honoured, so the result screen can say so instead
-        // of quietly showing boats at another price.
+        // $boat_meta reports whether the chosen budget could be matched.
         $boat_meta      = null;
         $matching_boats = BoatQuiz::get_matching_boats( $top_term->slug, $budget, $boat_count, $boat_meta );
 
-        // Build inventory CTA URL
         $inventory_url = BoatQuiz::build_inventory_url( $top_term->slug, $budget );
 
-        // Get "why" copy
         $why_text = BoatQuiz::get_result_copy( $top_term );
 
-        // Sanitise the optional Gravity Forms ID from the quiz wrapper.
         $gravity_form_id = absint( wp_unslash( $_POST['gravity_form_id'] ?? 0 ) );
 
-        // Render result template to string
         $html = Template_Loader::get_template(
             'shortcodes/boat-quiz-result.php',
             compact( 'top_term', 'why_text', 'inventory_url', 'matching_boats', 'alt_terms', 'gravity_form_id', 'answers', 'boat_meta' ),

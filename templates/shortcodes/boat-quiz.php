@@ -1,42 +1,27 @@
 <?php
 /**
- * Boat Quiz Template
+ * Step-by-step boat finder quiz form.
  *
- * Renders the step-by-step boat finder quiz form.
+ * Override by copying to your-theme/dealerschoice/shortcodes/boat-quiz.php.
  *
- * ── THEME OVERRIDE ───────────────────────────────────────────────────────────
- * Copy this file to {your-theme}/dealerschoice/shortcodes/boat-quiz.php
- * and modify to customise the quiz layout or question presentation for a
- * specific client without editing the plugin.
- *
- * ── AVAILABLE VARIABLES ──────────────────────────────────────────────────────
- * $title        (string) Quiz heading — from shortcode attribute or default.
- * $subtitle     (string) Sub-heading below title.
- * $submit_label (string) Label on the final submit button.
- * $questions    (array)  Question definitions from DC\BoatQuiz::get_questions().
- *               Each question: [ 'key', 'number', 'text', 'cols', 'options' ]
- *               Each option:   [ 'value', 'label', 'description', 'svg'|'dollars' ]
- * $nonce        (string) wp_create_nonce('dealerschoice_quiz_nonce')
- * $total_steps  (int)    Total number of question steps (for JS).
- * $boat_count   (int)    Number of matching boats to show in the result slider.
+ * @var string $title           Quiz heading.
+ * @var string $subtitle        Subheading below the title.
+ * @var string $submit_label    Label on the final submit button.
+ * @var array  $questions       Questions from DC\BoatQuiz::get_questions(). Each question has
+ *                              'key', 'number', 'text', 'cols', 'options' and optional 'conditional';
+ *                              each option has 'value', 'label', 'description', 'svg' or 'dollars',
+ *                              and optional 'group'.
+ * @var string $nonce           Nonce for the 'dealerschoice_quiz_nonce' action.
+ * @var int    $total_steps     Number of question steps.
+ * @var int    $gravity_form_id Gravity Forms lead form ID, or 0 for none.
+ * @var int    $boat_count      Number of matching boats to show in the result slider.
  *
  * @package DealersChoice
- * @subpackage Templates
- * @since 1.0.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
-
-/** @var string $title */
-/** @var string $subtitle */
-/** @var string $submit_label */
-/** @var array  $questions */
-/** @var string $nonce */
-/** @var int    $total_steps */
-/** @var int    $gravity_form_id */
-/** @var int    $boat_count */
 ?>
 <div
     class="dc-quiz-wrap"
@@ -94,9 +79,7 @@ if ( ! defined( 'ABSPATH' ) ) {
             >
                 <?php foreach ( $question['options'] as $option ) :
                     $has_group      = ! empty( $option['group'] );
-                    // Include the group slug in the id so that shared value slugs
-                    // (e.g. 'performance_handling' in both cruising and adventure)
-                    // never produce duplicate id/for pairs in the DOM.
+                    // Group slug keeps option IDs unique when values repeat across groups.
                     $opt_id         = 'dc-quiz-opt-' . esc_attr( $question['key'] )
                                       . ( $has_group ? '-' . esc_attr( $option['group'] ) : '' )
                                       . '-' . esc_attr( $option['value'] );

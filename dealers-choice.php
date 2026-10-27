@@ -3,14 +3,14 @@
  * Plugin Name: DealersChoice Solutions
  * Plugin URI: https://www.dealerschoicesolutions.com
  * Description: A comprehensive dealership inventory management plugin that syncs boat listings from your DMS to WordPress with automatic categorization, image management, and advanced filtering.
- * Version: 1.0.8.1.1
+ * Version: 1.0.9
  * Author: DealersChoice, by Mannix Marketing
  * Author URI: https://www.dealerschoicesolutions.com
  * License: GPL2
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: dealers-choice
  * Requires at least: 6.0
- * Requires PHP: 7.4
+ * Requires PHP: 8.1
  *
  * @package DealersChoice
  * @author Mannix Marketing
@@ -31,41 +31,39 @@
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
-    exit; // Exit if accessed directly
+    exit;
 }
 
-// Activation and Deactivation hooks
 register_activation_hook(__FILE__, 'dealers_choice_activate');
 register_deactivation_hook(__FILE__, 'dealers_choice_deactivate');
 
 /**
- * Plugin activation callback
+ * Activates the plugin.
+ *
+ * Registers the post type and taxonomies, flushes rewrites, adds the postmeta
+ * index, creates the favorites table and schedules the twice-daily sync.
  */
 function dealers_choice_activate() {
     registerCustomPostTypeAndTaxonomies();
     flush_rewrite_rules();
 
-    // Set default options
     add_option('dealers_choice_log_enabled', '1');
 
-    // Add database indexes for better query performance
     dealers_choice_add_database_indexes();
 
-    // Create favorites analytics table
     dealers_choice_create_favorites_table();
 
-    // Schedule automatic inventory sync (twice daily)
     if (!wp_next_scheduled('dealerschoice_inventory_sync_cron')) {
         wp_schedule_event(time(), 'twicedaily', 'dealerschoice_inventory_sync_cron');
     }
 
-    // Log activation
     dealers_choice_log('Plugin activated', 'info');
 }
 
 /**
- * Create the favorites analytics table if it does not exist.
- * Safe to call on every load — uses dbDelta which is idempotent.
+ * Creates or updates the favorites analytics table.
+ *
+ * Runs dbDelta only when the stored table version differs from the current one.
  */
 function dealers_choice_create_favorites_table() {
     global $wpdb;
@@ -98,26 +96,23 @@ function dealers_choice_create_favorites_table() {
 }
 
 /**
- * Add database indexes for optimized queries
+ * Adds a composite meta_key/meta_value index to the postmeta table if missing.
  */
 function dealers_choice_add_database_indexes() {
     global $wpdb;
 
-    // Check if indexes already exist before adding
     $indexes = $wpdb->get_results("SHOW INDEX FROM {$wpdb->postmeta} WHERE Key_name = 'meta_key_value'");
 
     if (empty($indexes)) {
-        // Add composite index on meta_key and meta_value for faster ACF field queries
         $wpdb->query("ALTER TABLE {$wpdb->postmeta} ADD INDEX meta_key_value (meta_key(191), meta_value(100))");
         dealers_choice_log('Added database indexes for optimization', 'info');
     }
 }
 
 /**
- * Plugin deactivation callback
+ * Deactivates the plugin: clears scheduled cron events and flushes rewrites.
  */
 function dealers_choice_deactivate() {
-    // Clear scheduled cron jobs
     $timestamp = wp_next_scheduled('delete_old_draft_boats_cron');
     if ($timestamp) {
         wp_unschedule_event($timestamp, 'delete_old_draft_boats_cron');
@@ -130,24 +125,25 @@ function dealers_choice_deactivate() {
 
     flush_rewrite_rules();
 
-    // Log deactivation
     dealers_choice_log('Plugin deactivated', 'info');
 }
 
 /**
- * Logging function for the plugin
+ * Writes a plugin log entry.
  *
- * @param string $message Log message
- * @param string $level Log level: info, warning, error
- * @param array $context Additional context
+ * Writes to error_log when WP_DEBUG_LOG is enabled and keeps the most recent
+ * 100 entries in the `dealers_choice_recent_logs` option. Does nothing when
+ * logging is disabled.
+ *
+ * @param string $message Log message.
+ * @param string $level   Optional. Log level: info, warning or error. Default 'info'.
+ * @param array  $context Optional. Additional context data. Default empty array.
  */
 function dealers_choice_log($message, $level = 'info', $context = []) {
-    // Check if logging is enabled
     if (!get_option('dealers_choice_log_enabled', '1')) {
         return;
     }
 
-    // Format the log message
     $formatted_message = sprintf(
         '[DealersChoice] [%s] %s',
         strtoupper($level),
@@ -158,12 +154,10 @@ function dealers_choice_log($message, $level = 'info', $context = []) {
         $formatted_message .= ' | Context: ' . json_encode($context);
     }
 
-    // Log to WordPress debug.log if WP_DEBUG_LOG is enabled
     if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
         error_log($formatted_message);
     }
 
-    // Also store recent logs in option for admin display
     $recent_logs = get_option('dealers_choice_recent_logs', []);
     $recent_logs[] = [
         'timestamp' => current_time('mysql'),
@@ -172,7 +166,6 @@ function dealers_choice_log($message, $level = 'info', $context = []) {
         'context' => $context
     ];
 
-    // Keep only last 100 logs
     if (count($recent_logs) > 100) {
         $recent_logs = array_slice($recent_logs, -100);
     }
@@ -181,7 +174,9 @@ function dealers_choice_log($message, $level = 'info', $context = []) {
 }
 
 /**
- * Check if ACF plugin is active
+ * Checks whether ACF is active and queues an admin notice if it is not.
+ *
+ * @return bool True if ACF is active.
  */
 function dealers_choice_check_acf() {
     if (!function_exists('acf_add_local_field_group')) {
@@ -193,7 +188,7 @@ function dealers_choice_check_acf() {
 add_action('plugins_loaded', 'dealers_choice_check_acf');
 
 /**
- * Display admin notice if ACF is not active
+ * Outputs the admin notice shown when ACF is not active.
  */
 function dealers_choice_acf_admin_notice() {
     ?>
@@ -209,12 +204,11 @@ function dealers_choice_acf_admin_notice() {
     <?php
 }
 
-// Define plugin constants
 define('DC_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('DC_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('DC_VERSION', '1.0.8.1');
+define('DC_VERSION', '1.0.9');
 
-// Plugin Update Checker — polls DealersChoice PUC Server for releases and triggers updates in WP Admin.
+// Plugin Update Checker: checks the DealersChoice update server for new releases.
 require_once DC_PLUGIN_DIR . 'lib/plugin-update-checker/load-v5p7.php';
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
@@ -224,7 +218,6 @@ $dc_update_checker = PucFactory::buildUpdateChecker(
     'dealerschoice'
 );
 
-// Load core classes
 require_once plugin_dir_path(__FILE__) . '/classes/class.inventory.php';
 require_once plugin_dir_path(__FILE__) . '/classes/class.boat.php';
 require_once plugin_dir_path(__FILE__) . '/classes/class.inventory-sync.php';
@@ -232,7 +225,6 @@ require_once plugin_dir_path(__FILE__) . '/classes/class.acf-taxonomy-sync.php';
 require_once plugin_dir_path(__FILE__) . '/classes/class.wp-cli-commands.php';
 require_once plugin_dir_path(__FILE__) . '/classes/class.insert-shortcodes.php';
 
-// Load public-facing classes
 require_once plugin_dir_path(__FILE__) . '/classes/class.template-loader.php';
 require_once plugin_dir_path(__FILE__) . '/classes/class.ajax-handlers.php';
 require_once plugin_dir_path(__FILE__) . '/classes/class.shortcodes.php';
@@ -240,29 +232,54 @@ require_once plugin_dir_path(__FILE__) . '/classes/class.redirects.php';
 require_once plugin_dir_path(__FILE__) . '/classes/class.boat-quiz.php';
 require_once plugin_dir_path(__FILE__) . '/classes/class.gravity-forms.php';
 
-// Sync ACF fields to taxonomies on manual boat post save
 new DC\ACF_Taxonomy_Sync();
 
-// Initialize AJAX handlers
 DC\AJAX_Handlers::init();
 
-// Initialize shortcodes
 DC\Shortcodes::init();
 
-// Initialize redirects
 DC\Redirects::init();
 
-// Initialize Gravity Forms integration (quiz lead-capture data in notifications)
 DC\GravityForms::init();
 
-// Ensure the favorites table exists on every load (handles plugin upgrades without reactivation)
 add_action('plugins_loaded', 'dealers_choice_create_favorites_table');
 
-// Register the favorites analytics dashboard widget
+/**
+ * Checks whether the favorites feature is enabled.
+ *
+ * Defaults to enabled when the option has never been saved.
+ *
+ * @return bool True if favorites are enabled.
+ */
+function dealerschoiceIsFavoritesEnabled() {
+    return get_option('dealerschoice_show_favorites', '1') === '1';
+}
+
+/**
+ * Migrates 'dealers_choice_show_favorites' to 'dealerschoice_show_favorites'.
+ *
+ * Copies the legacy value once, deletes the legacy option, and filters reads
+ * of the legacy name to return the current setting.
+ */
+function dealerschoiceMigrateFavoritesOption() {
+    if (get_option('dealerschoice_show_favorites', null) === null) {
+        $legacy_value = get_option('dealers_choice_show_favorites', null);
+        if ($legacy_value !== null) {
+            update_option('dealerschoice_show_favorites', $legacy_value === '1' ? '1' : '0');
+            delete_option('dealers_choice_show_favorites');
+        }
+    }
+
+    add_filter('pre_option_dealers_choice_show_favorites', function() {
+        return dealerschoiceIsFavoritesEnabled() ? '1' : '0';
+    });
+}
+add_action('plugins_loaded', 'dealerschoiceMigrateFavoritesOption', 5);
+
 add_action('wp_dashboard_setup', 'dealers_choice_register_favorites_widget');
 
 /**
- * Register the Favorite Boats dashboard widget.
+ * Registers the Favorite Boats dashboard widget for administrators.
  */
 function dealers_choice_register_favorites_widget() {
     if ( ! current_user_can('manage_options') ) {
@@ -276,10 +293,12 @@ function dealers_choice_register_favorites_widget() {
 }
 
 /**
- * Render the Favorite Boats dashboard widget.
+ * Renders the Favorite Boats dashboard widget.
+ *
+ * Lists the ten boats with the highest net favorites for the selected period.
  */
 function dealers_choice_favorites_widget_callback() {
-    if ( get_option('dealers_choice_show_favorites', '1') !== '1' ) {
+    if ( ! dealerschoiceIsFavoritesEnabled() ) {
         echo '<p>' . esc_html__('Favorites are currently disabled in DealersChoice Settings.', 'dealers-choice') . '</p>';
         return;
     }
@@ -287,7 +306,6 @@ function dealers_choice_favorites_widget_callback() {
     global $wpdb;
     $table = $wpdb->prefix . 'dc_favorite_events';
 
-    // Period filter
     $period  = isset( $_GET['dc_fav_period'] ) ? sanitize_text_field( $_GET['dc_fav_period'] ) : '30';
     $periods = [ 'today' => 'Today', '7' => 'Last 7 Days', '30' => 'Last 30 Days', 'all' => 'All Time' ];
     $where   = '';
@@ -309,7 +327,6 @@ function dealers_choice_favorites_widget_callback() {
          LIMIT 10"
     );
 
-    // Period tabs
     $base_url = admin_url('index.php');
     echo '<div style="margin-bottom:10px;">';
     foreach ( $periods as $key => $label ) {
@@ -350,13 +367,11 @@ function dealers_choice_favorites_widget_callback() {
     echo '<p style="margin-top:8px;"><a href="' . $analytics_url . '">' . esc_html__('View full analytics →', 'dealers-choice') . '</a></p>';
 }
 
-// Admin classes
 if (is_admin()) {
     require_once plugin_dir_path(__FILE__) . '/admin/admin.plugin-settings.php';
     require_once plugin_dir_path(__FILE__) . '/admin/admin.sync-inventory.php';
     require_once plugin_dir_path(__FILE__) . '/admin/admin.favorites-analytics.php';
 
-    // Register admin menu
     add_action('admin_menu', function() {
         add_menu_page(
             __('DealersChoice Settings', 'dealers-choice'),
@@ -394,7 +409,7 @@ if (is_admin()) {
             'dealers_choice_favorites_page'
         );
 
-        // add submenu link to DealersChoice IMS (https://dealerschoiceims.securem2.com) to DealersChoice admin menu
+        // External link to the DealersChoice IMS.
         global $submenu;
         $submenu['dealers-choice-settings'][] = array(
             'DealersChoice IMS <span class="dashicons dashicons-external" style="display:inline; font-size: 14px; vertical-align: -1px;"></span>',
@@ -403,7 +418,7 @@ if (is_admin()) {
         );
     });
 
-    // Add inline CSS for menu icon sizing on all admin pages
+    // Admin menu icon sizing, and opens the IMS menu link in a new tab.
     add_action('admin_head', function() {
         echo '<style>
             #adminmenu #toplevel_page_dealers-choice-settings .wp-menu-image img {
@@ -412,7 +427,6 @@ if (is_admin()) {
             }
         </style>';
 
-        // Force external IMS menu link to open in a new tab safely
         echo '<script>
             jQuery(document).ready(function($) {
                 $("a[href=\'https://dealerschoiceims.securem2.com\']").attr("target", "_blank").attr("rel", "noopener noreferrer");
@@ -421,19 +435,18 @@ if (is_admin()) {
     });
 }
 
-// Optional AI description generator
+// Optional AI description generator, loaded only when DCS_AI_SERVICE is defined.
 if (defined( 'DCS_AI_SERVICE' )){
     require_once plugin_dir_path(__FILE__) . '/classes/class.generate-description.php';
 }
 
 /**
- * Register custom post type and taxonomy
- * Post Type: Inventory
- * Basic Taxonomies: Type, Condition, Make, Year, Price Range, Length
- * Advanced Taxonomies: Location, Horsepower
+ * Registers the `boat` post type, its taxonomies and the range terms.
+ *
+ * Registers the public inventory taxonomies, the private `dc_promotions`
+ * taxonomy, and creates the price, length, horsepower and capacity range terms.
  */
 function registerCustomPostTypeAndTaxonomies() {
-    // Register the Boat custom post type
     $labels = [
         'name'                  => __('Inventory', 'dealers-choice'),
         'singular_name'         => __('Inventory', 'dealers-choice'),
@@ -476,7 +489,7 @@ function registerCustomPostTypeAndTaxonomies() {
 
     register_post_type('boat', $args);
 
-    // Register Taxonomies
+    // Taxonomy slug => [singular label, plural label, slug].
     $taxonomies = [
         'boat_type' => ['Boat Type', 'Boat Types', 'boat-type'],
         'condition' => ['Condition', 'Conditions', 'condition'],
@@ -522,14 +535,7 @@ function registerCustomPostTypeAndTaxonomies() {
         );
     }
 
-    /**
-     * Promotions Taxonomy
-     * Terms are intentionally NOT provided by inventory sync or plugin.
-     * Each dealer names their own promotions in the WordPress admin
-     * ("Featured", "Clearance", "Manager's Special", or whatever their marketing uses)
-     * The plugin ships the container for dealer merchandising, never the vocabulary,
-     * so no client's conventions are baked into code shared across sites.
-     */
+    // Promotions: private, hierarchical taxonomy whose terms are managed in the admin.
     register_taxonomy(
         'dc_promotions',
         'boat',
@@ -566,21 +572,15 @@ function registerCustomPostTypeAndTaxonomies() {
         ]
     );
 
-    // Create range taxonomy terms
     dealers_choice_create_range_terms();
 }
 add_action('init', 'registerCustomPostTypeAndTaxonomies');
 
 /**
- * Resolve the URL of the site-wide inventory page.
+ * Resolves the URL of the site-wide inventory page.
  *
- * Resolution order: the explicit 'dealers_choice_inventory_page_id' option,
- * then a page at the /inventory/ path, then home_url('/inventory/').
- *
- * NOTE: this same lookup is currently duplicated in
- * DC\BoatQuiz::build_inventory_url() and DC\Redirects::get_inventory_page_url().
- * Those two should be refactored onto this function so the resolution order
- * only lives in one place; left alone for now to keep this change reviewable.
+ * Uses the 'dealers_choice_inventory_page_id' option, then a page at the
+ * /inventory/ path, then home_url('/inventory/').
  *
  * @return string Absolute URL, or '' if it cannot be resolved.
  */
@@ -601,21 +601,22 @@ function dealers_choice_get_inventory_page_url() {
 }
 
 /**
- * Allow for the inventory "boat_type" in the URL
- * URLs should be /boat/{boat_type}/{slug}/
- **/
+ * Replaces the %type% placeholder in boat permalinks with the boat type slug.
+ *
+ * Produces /boat/{boat_type}/{slug}/, using 'general' when the boat has no type.
+ *
+ * @param string       $post_link Post permalink.
+ * @param WP_Post|null $post      Optional. Post object. Default null.
+ * @param bool         $leavename Optional. Whether to keep the post name placeholder. Default false.
+ * @return string Filtered permalink.
+ */
 function inventoryChangeLinkWithType( $post_link, $post = null, $leavename = false ) {
-    // Check if the post is a 'boat'
     if ( is_object( $post ) && $post->post_type == 'boat' ) {
-        // Get the terms associated with the post
         $terms = wp_get_object_terms( $post->ID, array('boat_type') );
 
-        // Check if there was an error or if terms are empty
         if ( ! is_wp_error( $terms ) && ! empty( $terms ) ) {
-            // Replace the placeholder with the term slug
             return str_replace( '%type%', $terms[0]->slug, $post_link );
         } else {
-            // If no terms found, use 'general' as default
             return str_replace( '%type%', 'general', $post_link );
         }
     }
@@ -624,9 +625,8 @@ function inventoryChangeLinkWithType( $post_link, $post = null, $leavename = fal
 add_filter( 'post_type_link', 'inventoryChangeLinkWithType', 1, 3 );
 
 /**
- * Load the template on the new generated URL
- * otherwise you will get 404's the page
- **/
+ * Adds the rewrite rule that maps /boat/{type}/{slug}/ to the boat post.
+ */
 function inventoryGeneratedRewriteRules() {
     add_rewrite_rule(
         '^boat/(.*)/(.*)/?$',
@@ -637,16 +637,18 @@ function inventoryGeneratedRewriteRules() {
 add_action( 'init', 'inventoryGeneratedRewriteRules' );
 
 /**
- * Get default price range key
+ * Returns the default (lowest) price range term name.
+ *
+ * @return string Price range term name.
  */
 function dealers_choice_get_default_price_range_key() {
     return "$0 - $20k";
 }
 
 /**
- * Get price ranges with min/max values
+ * Returns the price range buckets.
  *
- * @return array Array of price ranges with [min, max] values
+ * @return array Term name => [min, max] in dollars.
  */
 function dealers_choice_get_price_ranges() {
     return [
@@ -660,16 +662,18 @@ function dealers_choice_get_price_ranges() {
 }
 
 /**
- * Get default length key
+ * Returns the default (shortest) length range term name.
+ *
+ * @return string Length range term name.
  */
 function dealers_choice_get_default_length_key() {
     return "Under 20 ft.";
 }
 
 /**
- * Get length ranges with min/max values (in feet)
+ * Returns the length range buckets.
  *
- * @return array Array of length ranges with [min, max] values
+ * @return array Term name => [min, max] in feet.
  */
 function dealers_choice_get_lengths() {
     return [
@@ -683,16 +687,18 @@ function dealers_choice_get_lengths() {
 }
 
 /**
- * Get default horsepower key
+ * Returns the default (lowest) horsepower range term name.
+ *
+ * @return string Horsepower range term name.
  */
 function dealers_choice_get_default_horsepower_key() {
     return "Up to 90";
 }
 
 /**
- * Get horsepower ranges with min/max values
+ * Returns the horsepower range buckets.
  *
- * @return array Array of horsepower ranges with [min, max] values
+ * @return array Term name => [min, max] horsepower.
  */
 function dealers_choice_get_horsepower() {
     return [
@@ -706,10 +712,9 @@ function dealers_choice_get_horsepower() {
 }
 
 /**
- * Create taxonomy terms for price ranges, lengths, and horsepower
+ * Creates any missing price, length, horsepower and person capacity range terms.
  */
 function dealers_choice_create_range_terms() {
-    // Create price range terms
     if ($price_ranges = dealers_choice_get_price_ranges()) {
         foreach ($price_ranges as $key => $min_max) {
             if (!term_exists($key, 'price_range')) {
@@ -718,7 +723,6 @@ function dealers_choice_create_range_terms() {
         }
     }
 
-    // Create length terms
     if ($lengths = dealers_choice_get_lengths()) {
         foreach ($lengths as $key => $min_max) {
             if (!term_exists($key, 'length_range')) {
@@ -727,7 +731,6 @@ function dealers_choice_create_range_terms() {
         }
     }
 
-    // Create horsepower terms
     if ($horsepower = dealers_choice_get_horsepower()) {
         foreach ($horsepower as $key => $min_max) {
             if (!term_exists($key, 'horsepower')) {
@@ -736,7 +739,6 @@ function dealers_choice_create_range_terms() {
         }
     }
 
-    // Create person capacity terms
     if ($capacities = dealers_choice_get_capacity_ranges()) {
         foreach ($capacities as $key => $min_max) {
             if (!term_exists($key, 'person_capacity')) {
@@ -747,10 +749,10 @@ function dealers_choice_create_range_terms() {
 }
 
 /**
- * Determine which price range a boat belongs to
+ * Returns the price range term name for a price.
  *
- * @param float $price The boat price
- * @return string|false The price range term name or false
+ * @param float|string $price Boat price.
+ * @return string Price range term name, or the default range when none matches.
  */
 function dealers_choice_get_price_range_term($price) {
     $price = (float) $price;
@@ -766,10 +768,10 @@ function dealers_choice_get_price_range_term($price) {
 }
 
 /**
- * Determine which length range a boat belongs to
+ * Returns the length range term name for a length in feet.
  *
- * @param float $length_feet The boat length in feet
- * @return string|false The length range term name or false
+ * @param float|string $length_feet Boat length in feet.
+ * @return string Length range term name, or the default range when none matches.
  */
 function dealers_choice_get_length_range_term($length_feet) {
     $length_feet = (float) $length_feet;
@@ -785,10 +787,10 @@ function dealers_choice_get_length_range_term($length_feet) {
 }
 
 /**
- * Determine which horsepower range a boat belongs to
+ * Returns the horsepower range term name for an engine horsepower.
  *
- * @param float $hp The boat horsepower
- * @return string|false The horsepower range term name or false
+ * @param float|string $hp Engine horsepower.
+ * @return string Horsepower range term name, or the default range when none matches.
  */
 function dealers_choice_get_horsepower_range_term($hp) {
     $hp = (float) $hp;
@@ -804,16 +806,18 @@ function dealers_choice_get_horsepower_range_term($hp) {
 }
 
 /**
- * Get default person capacity key
+ * Returns the default (smallest) person capacity range term name.
+ *
+ * @return string Person capacity range term name.
  */
 function dealers_choice_get_default_capacity_key() {
     return "1 - 4 People";
 }
 
 /**
- * Get person capacity ranges with min/max values
+ * Returns the person capacity range buckets.
  *
- * @return array Array of capacity ranges with [min, max] values
+ * @return array Term name => [min, max] people.
  */
 function dealers_choice_get_capacity_ranges() {
     return [
@@ -825,10 +829,10 @@ function dealers_choice_get_capacity_ranges() {
 }
 
 /**
- * Determine which person capacity range a boat belongs to
+ * Returns the person capacity range term name for a capacity.
  *
- * @param int $capacity The boat's person capacity
- * @return string The capacity range term name
+ * @param int|string $capacity Person capacity.
+ * @return string Person capacity range term name, or the default range when none matches.
  */
 function dealers_choice_get_capacity_range_term($capacity) {
     $capacity = (int) $capacity;
@@ -844,10 +848,9 @@ function dealers_choice_get_capacity_range_term($capacity) {
 }
 
 /**
- * Generate Advanced Custom Fields (ACF) fields for the Inventory post type
+ * Registers the ACF field groups for the `boat` post type.
  */
 function addACFFieldGroupForBoats() {
-    // Check if ACF is active
     if( function_exists('acf_add_local_field_group') ) {
 
         $location = array(
@@ -1091,11 +1094,11 @@ function addACFFieldGroupForBoats() {
                         'key' => 'field_hide_sale_price',
                         'label' => 'HIDE Sale Price',
                         'name' => 'hide_sale_price',
-                        'type' => 'true_false', // Use 'true_false' for a single checkbox (acts like a checkbox with yes/no or on/off)
+                        'type' => 'true_false',
                         'instructions' => 'Mark if you don not want to show the sale price on the front end of the website',
-                        'required' => 0, // Not required
-                        'default_value' => 0, // 0 means unchecked, 1 means checked
-                        'ui' => 1, // Optional, adds a toggle switch UI instead of a regular checkbox
+                        'required' => 0,
+                        'default_value' => 0,
+                        'ui' => 1,
                         'wrapper' => array(
                             'width' => '66%',
                             'class' => 'acf-responsive-field',
@@ -1321,11 +1324,11 @@ function addACFFieldGroupForBoats() {
                         'key' => 'field_boat_do_not_show_on_public_website',
                         'label' => 'Do NOT show on public facing side of the website',
                         'name' => 'do_not_show_on_public_website',
-                        'type' => 'true_false', // Use 'true_false' for a single checkbox (acts like a checkbox with yes/no or on/off)
+                        'type' => 'true_false',
                         'instructions' => 'Mark if the boat is set to not appear on the public search facing side of the website',
-                        'required' => 0, // Not required
-                        'default_value' => 0, // 0 means unchecked, 1 means checked
-                        'ui' => 1, // Optional, adds a toggle switch UI instead of a regular checkbox
+                        'required' => 0,
+                        'default_value' => 0,
+                        'ui' => 1,
                         'wrapper' => array(
                             'width' => '33%',
                             'class' => 'acf-responsive-field',
@@ -1360,25 +1363,25 @@ function addACFFieldGroupForBoats() {
                 "title"=>"Photos and Videos",
                 "fields"=> array(
                     array(
-                        'key' => 'field_boat_gallery', // Unique key for the gallery field
-                        'label' => 'Gallery Photos', // The label that will appear in the backend
-                        'name' => 'gallery', // The name used to retrieve the gallery
-                        'type' => 'gallery', // ACF field type for a gallery
+                        'key' => 'field_boat_gallery',
+                        'label' => 'Gallery Photos',
+                        'name' => 'gallery',
+                        'type' => 'gallery',
                         'instructions' => 'Add images to the boat gallery.',
-                        'required' => 0, // Optional (0), or required (1)
-                        'return_format' => 'id', // Options: array, url, id
-                        'preview_size' => 'medium', // Preview size in the admin area
-                        'insert' => 'append', // Insert new images at the end or beginning
-                        'library' => 'all', // 'all' or 'uploadedTo'
-                        'min' => 0, // Minimum number of images (0 = no limit)
-                        'max' => 0, // Maximum number of images (0 = no limit)
-                        'min_width' => 0, // Minimum width for images (in pixels)
-                        'min_height' => 0, // Minimum height for images (in pixels)
-                        'min_size' => 0, // Minimum size in MB
-                        'max_width' => 0, // Maximum width for images (in pixels)
-                        'max_height' => 0, // Maximum height for images (in pixels)
-                        'max_size' => 0, // Maximum size in MB
-                        'mime_types' => '', // Leave blank or restrict to certain types, e.g. 'jpg,png'
+                        'required' => 0,
+                        'return_format' => 'id',
+                        'preview_size' => 'medium',
+                        'insert' => 'append',
+                        'library' => 'all',
+                        'min' => 0,
+                        'max' => 0,
+                        'min_width' => 0,
+                        'min_height' => 0,
+                        'min_size' => 0,
+                        'max_width' => 0,
+                        'max_height' => 0,
+                        'max_size' => 0,
+                        'mime_types' => '',
                     ),
                     array(
                         'key' => 'field_boat_video1',
@@ -1442,7 +1445,6 @@ function addACFFieldGroupForBoats() {
         foreach ($existing_groups AS $data){
             $existing_group = acf_get_field_group($data['key']);
 
-            // If the group doesn't exist, create it
             if (!$existing_group) {
                 acf_add_local_field_group($data);
             }
@@ -1452,16 +1454,17 @@ function addACFFieldGroupForBoats() {
 add_action('acf/init', 'addACFFieldGroupForBoats');
 
 /**
- * Set default Yoast SEO titles and meta descriptions for the Boat CPT
+ * Sets default Yoast SEO title and meta description templates for boats.
+ *
+ * Runs once, when Yoast settings exist, and only fills templates that are
+ * empty or still the Yoast default. Sets the 'dealerschoice_yoast_defaults_set'
+ * flag when done.
  */
 function dealers_choice_set_yoast_defaults() {
-    // 1. Check our flag so we only ever run this ONCE.
-    // This prevents us from overwriting a manager's intentional changes later.
     if (get_option('dealerschoice_yoast_defaults_set')) {
         return;
     }
 
-    // 2. Make sure Yoast is actually installed and active
     $wpseo_titles = get_option('wpseo_titles');
     if (!is_array($wpseo_titles)) {
         return;
@@ -1469,40 +1472,39 @@ function dealers_choice_set_yoast_defaults() {
 
     $updated = false;
 
-    // 3. Set default Title if it hasn't been set yet
     if (empty($wpseo_titles['title-boat']) || $wpseo_titles['title-boat'] === '%%title%% %%page%% %%sep%% %%sitename%%') {
         $wpseo_titles['title-boat'] = '%%title%% For Sale in %%ct_location%% | %%sitename%%';
         $updated = true;
     }
 
-    // 4. Set default Meta Description if it hasn't been set yet
     if (empty($wpseo_titles['metadesc-boat'])) {
         $wpseo_titles['metadesc-boat'] = 'View the %%title%%, currently %%ct_boat_status%% at the %%ct_location%% showroom. Learn more or request a quote today.';
         $updated = true;
     }
 
-    // 5. Save back to the database
     if ($updated) {
         update_option('wpseo_titles', $wpseo_titles);
-        dealers_choice_log('Set default Yoast SEO templates for Boat CPT', 'info'); // Logs the action using your custom logger
+        dealers_choice_log('Set default Yoast SEO templates for Boat CPT', 'info');
     }
 
-    // 6. Set our flag so this function never modifies Yoast again
     update_option('dealerschoice_yoast_defaults_set', true);
 }
 add_action('admin_init', 'dealers_choice_set_yoast_defaults');
 
 
 /**
- * Convert length from feet and inches to decimal feet
- * Expected input value is in the format "X'Y"" where X is feet and Y is inches.
+ * Converts a length to decimal feet.
+ *
+ * Accepts feet and inches (X'Y") or a plain number of feet.
+ *
+ * @param string $value Length value.
+ * @return float|int Length in decimal feet rounded to 2 places, or 0 if empty or not a string.
  */
 function convertLengthToFeet($value) {
     if (empty($value) || !is_string($value)) {
         return 0;
     }
 
-    // Split the string by the apostrophe to separate feet and inches
     if (strpos($value, "'") === false) {
         return (float) $value;
     }
@@ -1511,34 +1513,30 @@ function convertLengthToFeet($value) {
     $feet = isset($parts[0]) && $parts[0] !== '' ? (float) $parts[0] : 0;
     $inches = isset($parts[1]) && $parts[1] !== '' ? (float) trim($parts[1], '"') : 0;
 
-    // Convert inches to a decimal of feet
     $decimalFeet = $feet + ($inches / 12);
 
-    // Return the result with 2 decimal places
     return round($decimalFeet, 2);
 }
 
 /**
- * Convert length from feet and inches to total inches
- * Expected input value is in the format "X'Y"" where X is feet and Y is inches.
- * Also handles decimal feet format like "23.417"
+ * Converts a length to total inches.
  *
- * @param mixed $value Length value in various formats
- * @return string Formatted inches as string with 2 decimals, or empty string if invalid
+ * Accepts decimal feet (23.417), feet and inches (19'6"), or a string
+ * containing a number of feet.
+ *
+ * @param string|float|int $value Length value.
+ * @return string Inches formatted with 2 decimals, or '' if invalid.
  */
 function convertLengthToInches($value) {
     if (empty($value) || $value === null || $value === '') {
         return '';
     }
 
-    // If value is already numeric (decimal feet), convert directly to inches
     if (is_numeric($value)) {
         return number_format((float) $value * 12, 2, '.', '');
     }
 
-    // Handle string format like "19'6\""
     if (strpos($value, "'") === false) {
-        // No apostrophe, try to parse as decimal feet
         $numeric = preg_replace("/[^0-9.]/", "", $value);
         if ($numeric !== '' && is_numeric($numeric)) {
             return number_format((float) $numeric * 12, 2, '.', '');
@@ -1546,27 +1544,24 @@ function convertLengthToInches($value) {
         return '';
     }
 
-    // Split the string by the apostrophe to separate feet and inches
     $parts = explode("'", $value);
     $feet = isset($parts[0]) && $parts[0] !== '' ? (float) $parts[0] : 0;
     $inches_part = isset($parts[1]) ? trim($parts[1], '"') : 0;
     $inches_value = $inches_part !== '' ? (float) $inches_part : 0;
 
-    // Convert feet to inches and add the additional inches
     $total_inches = ($feet * 12) + $inches_value;
     return number_format($total_inches, 2, '.', '');
 }
 
-// Schedule cron job for deleting old draft posts
+// Daily cleanup of old draft boats.
 if (!wp_next_scheduled('delete_old_draft_boats_cron')) {
     wp_schedule_event(time(), 'daily', 'delete_old_draft_boats_cron');
 }
 
-// Add the function to the cron hook
 add_action('delete_old_draft_boats_cron', 'delete_old_draft_boats');
 
 /**
- * Deletes draft 'boat' posts that are older than 6 months.
+ * Permanently deletes draft boats not modified in the last 6 months.
  */
 function delete_old_draft_boats() {
     $args = [
@@ -1579,7 +1574,7 @@ function delete_old_draft_boats() {
                 'before' => '6 months ago',
             ],
         ],
-        'fields' => 'ids', // Only get IDs for better performance
+        'fields' => 'ids',
     ];
 
     $old_drafts_query = new WP_Query($args);
@@ -1587,7 +1582,7 @@ function delete_old_draft_boats() {
 
     if (!empty($old_drafts_query->posts)) {
         foreach ($old_drafts_query->posts as $post_id) {
-            $result = wp_delete_post($post_id, true); // Force delete
+            $result = wp_delete_post($post_id, true);
             if ($result) {
                 $deleted_count++;
             }
@@ -1600,19 +1595,19 @@ function delete_old_draft_boats() {
     }
 }
 
-/**
- * Automatic inventory sync via cron
- * Runs twice daily to keep inventory up to date
- */
 add_action('dealerschoice_inventory_sync_cron', 'dealers_choice_auto_sync_inventory');
+/**
+ * Runs the scheduled inventory sync.
+ *
+ * Skips the run while another one holds the 'dealerschoice_sync_running'
+ * transient (1 hour), and logs the result or failure.
+ */
 function dealers_choice_auto_sync_inventory() {
-    // Check if sync is already running
     if (get_transient('dealerschoice_sync_running')) {
         dealers_choice_log('Skipping auto-sync - sync already in progress', 'info');
         return;
     }
 
-    // Set transient to prevent concurrent syncs (expires in 1 hour)
     set_transient('dealerschoice_sync_running', true, HOUR_IN_SECONDS);
 
     try {
@@ -1633,20 +1628,22 @@ function dealers_choice_auto_sync_inventory() {
             'message' => $e->getMessage()
         ]);
     } finally {
-        // Clear the running flag
         delete_transient('dealerschoice_sync_running');
     }
 }
 
-/**
- * Register plugin templates with WordPress
- */
+// Single boat template.
 add_filter('template_include', ['\DC\Template_Loader', 'template_include']);
 
 /**
- * Check whether a post contains a given shortcode, looking beyond post_content
- * into ACF field values (stored as postmeta) since shortcodes are often placed
- * inside ACF fields (e.g. WYSIWYG/text fields, repeaters) rather than the main editor.
+ * Checks whether a post contains a shortcode in its content or post meta.
+ *
+ * Searches post_content, then every string meta value except keys starting
+ * with an underscore (covers ACF text, WYSIWYG and repeater fields).
+ *
+ * @param int|string $post_id       Post ID.
+ * @param string     $shortcode_tag Shortcode tag.
+ * @return bool True if the shortcode is found.
  */
 function dealers_choice_post_has_shortcode($post_id, $shortcode_tag) {
     $post_id = (int) $post_id;
@@ -1659,7 +1656,6 @@ function dealers_choice_post_has_shortcode($post_id, $shortcode_tag) {
     }
 
     foreach (get_post_meta($post_id) as $meta_key => $meta_values) {
-        // Skip ACF's internal "_fieldname" reference keys, which store field keys, not content.
         if (strpos($meta_key, '_') === 0) {
             continue;
         }
@@ -1674,10 +1670,14 @@ function dealers_choice_post_has_shortcode($post_id, $shortcode_tag) {
 }
 
 /**
- * Enqueue public styles and scripts
+ * Registers public assets and enqueues them where needed.
+ *
+ * Enqueues the inventory assets on single boat pages and on singular pages
+ * that contain [dealerschoice_inventory], plus the theme's
+ * dealerschoice-overrides.css when present. Other shortcodes enqueue the
+ * registered handles when they render.
  */
 function dealers_choice_enqueue_public_assets() {
-    // Register Font Awesome (Light version)
     wp_register_style(
         'font-awesome-free',
         'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css',
@@ -1685,7 +1685,6 @@ function dealers_choice_enqueue_public_assets() {
         '6.7.2'
     );
 
-    // Register styles
     wp_register_style(
         'dealerschoice-public',
         DC_PLUGIN_URL . 'public/css/dealerschoice-public.css',
@@ -1699,7 +1698,6 @@ function dealers_choice_enqueue_public_assets() {
         DC_VERSION
     );
 
-    // Register scripts
     wp_register_script(
         'dealerschoice-public',
         DC_PLUGIN_URL . 'public/js/dealerschoice-public.js',
@@ -1809,7 +1807,6 @@ function dealers_choice_enqueue_public_assets() {
         ]
     );
 
-    // Localize script with AJAX URL and nonce
     wp_localize_script(
         'dealerschoice-public',
         'dealersChoicePublic',
@@ -1820,10 +1817,9 @@ function dealers_choice_enqueue_public_assets() {
         ]
     );
 
-    $show_favorites = get_option('dealerschoice_show_favorites', false);
+    $show_favorites = dealerschoiceIsFavoritesEnabled();
     $show_price = get_option('dealers_choice_always_show_price', true);
 
-    // Enqueue on boat post type pages or pages with shortcode
     if (is_singular('boat')) {
         wp_enqueue_style('font-awesome-free');
         wp_enqueue_style('dealerschoice-public');
@@ -1837,26 +1833,25 @@ function dealers_choice_enqueue_public_assets() {
             wp_enqueue_script('dealerschoice-favorites');
         }
 
-        // Fetch your custom option from the database
-        $popup_id = get_option('dealerschoice_sales_cta_popup_id', 0);
-        $inventory_view_limit = get_option('dealerschoice_inventory_view_limit', 5);
-        if ($popup_id) {
+        // Popup Maker CTA after N views of the same boat.
+        $popup_id = absint(get_option('dealerschoice_sales_cta_popup_id', 0));
+        $inventory_view_limit = absint(get_option('dealerschoice_inventory_view_limit', 5));
+        if ($popup_id && $inventory_view_limit) {
             wp_enqueue_script(
                 'dealerschoice-tracker',
-                plugin_dir_url(__FILE__) . 'js/inventory-tracker.js',
+                DC_PLUGIN_URL . 'public/js/inventory-tracker.js',
                 array('jquery'),
-                '1.0.0',
+                DC_VERSION,
                 true
             );
             wp_localize_script('dealerschoice-tracker', 'dc_settings', array(
                 'popup_id'   => $popup_id,
-                'view_limit' => $inventory_view_limit
+                'view_limit' => $inventory_view_limit,
             ));
         }
 
     } elseif (is_singular() && dealers_choice_post_has_shortcode(get_the_ID(), 'dealerschoice_inventory')) {
         $show_price = get_option('dealers_choice_always_show_price', true);
-        // Check for shortcode on singular pages (posts/pages)
         wp_enqueue_style('font-awesome-free');
         wp_enqueue_style('dealerschoice-public');
         wp_enqueue_script('dealerschoice-public');
@@ -1867,7 +1862,6 @@ function dealers_choice_enqueue_public_assets() {
         }
     }
 
-    // Enqueue user override CSS if it exists in the theme
     $override_path = get_stylesheet_directory() . '/dealerschoice/dealerschoice-overrides.css';
     if (file_exists($override_path)) {
         wp_enqueue_style(
@@ -1881,7 +1875,9 @@ function dealers_choice_enqueue_public_assets() {
 add_action('wp_enqueue_scripts', 'dealers_choice_enqueue_public_assets', 99);
 
 /**
- * Build the revealPriceSettings array for wp_localize_script.
+ * Builds the revealPriceSettings data passed to the Reveal Price script.
+ *
+ * @return array Reveal Price settings.
  */
 function dealers_choice_reveal_price_settings() {
     $allowed_zips_raw = get_option('dealers_choice_allowed_zips', '');
@@ -1904,11 +1900,20 @@ function dealers_choice_reveal_price_settings() {
     ];
 }
 
-/**
- * Stamp data-dc-field attributes on GF hidden fields that use our known parameter names,
- * so JS can find them without knowing their numeric field IDs.
- */
 add_filter('gform_field_content', 'dealers_choice_gf_stamp_field_attributes', 10, 5);
+/**
+ * Adds a data-dc-field attribute to Reveal Price form inputs.
+ *
+ * Applies to fields whose parameter name is inventoryID, priceStatus,
+ * priceValue, boatName or stockNumber. Matches the input by id, then by name.
+ *
+ * @param string   $field_content Field HTML.
+ * @param GF_Field $field         Gravity Forms field.
+ * @param mixed    $value         Field value.
+ * @param int      $entry_id      Entry ID.
+ * @param int      $form_id       Form ID.
+ * @return string Field HTML.
+ */
 function dealers_choice_gf_stamp_field_attributes($field_content, $field, $value, $entry_id, $form_id) {
     $reveal_form_id = get_option('dealers_choice_reveal_price_gravity_form_id', '');
     if (empty($reveal_form_id) || (int) $form_id !== (int) $reveal_form_id) {
@@ -1923,7 +1928,6 @@ function dealers_choice_gf_stamp_field_attributes($field_content, $field, $value
     $attr      = ' data-dc-field="' . esc_attr($field->inputName) . '"';
     $input_id  = preg_quote('input_' . $form_id . '_' . $field->id, '/');
 
-    // Inject data-dc-field onto the <input> tag by inserting the attribute before the closing >.
     $field_content = preg_replace_callback(
         '/(<input[^>]+id=["\']' . $input_id . '["\'][^>]*)(\/?>)/i',
         function($matches) use ($attr) {
@@ -1932,7 +1936,6 @@ function dealers_choice_gf_stamp_field_attributes($field_content, $field, $value
         $field_content
     );
 
-    // Fallback: match by name attribute if the id match didn't work.
     if (strpos($field_content, 'data-dc-field') === false) {
         $field_name = preg_quote('input_' . $field->id, '/');
         $field_content = preg_replace_callback(
@@ -1948,8 +1951,11 @@ function dealers_choice_gf_stamp_field_attributes($field_content, $field, $value
 }
 
 /**
- * Format a boat's sale price exactly as the Reveal Price button displays it.
- * Returns an empty string when the boat is not a published boat or has no usable price.
+ * Formats a published boat's sale price as the Reveal Price button displays it.
+ *
+ * @param int|string $post_id Boat post ID.
+ * @return string Formatted price such as "$45,999", or '' when the post is not a
+ *                published boat or has no positive price.
  */
 function dealers_choice_get_revealable_price($post_id) {
     $post_id = absint($post_id);
@@ -1965,23 +1971,22 @@ function dealers_choice_get_revealable_price($post_id) {
     return '$' . number_format((float) $price);
 }
 
-/**
- * When a Reveal Price form is submitted, write the price the visitor was shown into the
- * priceValue field before the entry is saved and before notifications / feeds run, so
- * {all_fields}, the field's merge tag, and CRM add-ons all receive it.
- *
- * The price is resolved server-side and never sent to the browser in the form. Whatever was
- * posted for priceValue is always overwritten, so a visitor cannot inject their own value.
- * The value is frozen at submission time; later inventory syncs do not change the entry.
- */
 add_action('gform_pre_submission', 'dealers_choice_populate_price_in_entry');
+/**
+ * Writes the boat price into the Reveal Price form's priceValue field on submission.
+ *
+ * Looks up the price server-side from the submitted inventoryID and replaces
+ * the posted priceValue. Uses 'Not Shown' when ZIP restrictions apply and the
+ * status is not 'Verified in sales area', or when no price is available.
+ *
+ * @param array $form Gravity Forms form.
+ */
 function dealers_choice_populate_price_in_entry($form) {
     $reveal_form_id = get_option('dealers_choice_reveal_price_gravity_form_id', '');
     if (empty($reveal_form_id) || (int) $form['id'] !== (int) $reveal_form_id) {
         return;
     }
 
-    // Find our fields by their inputName (parameter name).
     $inventory_field_id   = null;
     $status_field_id      = null;
     $price_value_field_id = null;
@@ -1997,8 +2002,6 @@ function dealers_choice_populate_price_in_entry($form) {
 
     $price_key = 'input_' . $price_value_field_id;
 
-    // The JS only reveals the price when there are no zip restrictions, or when the
-    // visitor's location was verified. Mirror that here; anything else was not shown.
     $allowed_zips = trim((string) get_option('dealers_choice_allowed_zips', ''));
     $status       = $status_field_id ? sanitize_text_field(wp_unslash(rgpost('input_' . $status_field_id))) : '';
     $was_shown    = $allowed_zips === '' || $status === 'Verified in sales area';
@@ -2012,20 +2015,20 @@ function dealers_choice_populate_price_in_entry($form) {
 }
 
 /**
- * Add body classes for boat pages
+ * Adds DealersChoice body classes and removes 'blog' on boat and inventory pages.
+ *
+ * @param string[] $classes Body classes.
+ * @return string[] Body classes.
  */
 function dealers_choice_body_classes($classes) {
     if (is_singular('boat')) {
         $classes[] = 'dealerschoice-single';
-        // Remove blog class if present
         $classes = array_diff($classes, ['blog']);
     } elseif (is_singular() && dealers_choice_post_has_shortcode(get_the_ID(), 'dealerschoice_inventory')) {
         $classes[] = 'dealerschoice-inventory-page';
-        // Remove blog class to prevent theme blog styles from interfering
         $classes = array_diff($classes, ['blog']);
     } elseif (is_singular() && dealers_choice_post_has_shortcode(get_the_ID(), 'dealerschoice_favorites')) {
         $classes[] = 'dealerschoice-inventory-page';
-        // Remove blog class to prevent theme blog styles from interfering
         $classes = array_diff($classes, ['blog']);
     }
     return $classes;
@@ -2033,37 +2036,45 @@ function dealers_choice_body_classes($classes) {
 add_filter('body_class', 'dealers_choice_body_classes');
 
 /**
- * Add a shortcode to display the reveal price message.
+ * Renders the [dealerschoice_reveal_price_message] placeholder for Reveal Price messages.
+ *
+ * @return string Placeholder HTML.
  */
 function dealers_choice_reveal_price_message_shortcode() {
     return '<div class="dc-reveal-price-message"></div>';
 }
 add_shortcode('dealerschoice_reveal_price_message', 'dealers_choice_reveal_price_message_shortcode');
 
-/**
- * Customize boat admin columns
- */
 add_filter('manage_edit-boat_columns', 'dealers_choice_boat_columns');
+/**
+ * Adds Stock #, Price, Year, Type, Condition and Location columns to the boat list table.
+ *
+ * Moves the Date column to the end.
+ *
+ * @param string[] $columns List table columns.
+ * @return string[] List table columns.
+ */
 function dealers_choice_boat_columns($columns) {
-    // Remove default date column
     unset($columns['date']);
 
-    // Add custom columns
     $columns['stock_number'] = __('Stock #', 'dealers-choice');
     $columns['saleprice'] = __('Price', 'dealers-choice');
     $columns['boat_year'] = __('Year', 'dealers-choice');
     $columns['boat_type'] = __('Type', 'dealers-choice');
     $columns['condition'] = __('Condition', 'dealers-choice');
     $columns['location'] = __('Location', 'dealers-choice');
-    $columns['date'] = __('Date', 'dealers-choice'); // Re-add date at the end
+    $columns['date'] = __('Date', 'dealers-choice');
 
     return $columns;
 }
 
-/**
- * Display custom column values
- */
 add_action('manage_boat_posts_custom_column', 'dealers_choice_display_boat_columns', 10, 2);
+/**
+ * Outputs the value of a custom boat list table column.
+ *
+ * @param string $column  Column key.
+ * @param int    $post_id Boat post ID.
+ */
 function dealers_choice_display_boat_columns($column, $post_id) {
     switch ($column) {
         case 'stock_number':
@@ -2118,10 +2129,13 @@ function dealers_choice_display_boat_columns($column, $post_id) {
     }
 }
 
-/**
- * Make boat columns sortable
- */
 add_filter('manage_edit-boat_sortable_columns', 'dealers_choice_sortable_boat_columns');
+/**
+ * Makes the Stock #, Price and Year columns sortable.
+ *
+ * @param array $columns Sortable columns.
+ * @return array Sortable columns.
+ */
 function dealers_choice_sortable_boat_columns($columns) {
     $columns['stock_number'] = 'stock_number';
     $columns['saleprice'] = 'saleprice';
@@ -2129,10 +2143,12 @@ function dealers_choice_sortable_boat_columns($columns) {
     return $columns;
 }
 
-/**
- * Handle sorting for custom boat columns
- */
 add_action('pre_get_posts', 'dealers_choice_sort_boats_by_column');
+/**
+ * Applies meta ordering for the sortable boat list table columns.
+ *
+ * @param WP_Query $query Current query.
+ */
 function dealers_choice_sort_boats_by_column($query) {
     if (!is_admin() || !$query->is_main_query() || 'boat' !== $query->get('post_type')) {
         return;
@@ -2152,35 +2168,21 @@ function dealers_choice_sort_boats_by_column($query) {
     }
 }
 
+add_action('pre_get_posts', 'dealers_choice_admin_search_stock_and_hin');
 /**
- * Extend the Inventory list table's search box to also match Stock Number and
- * HIN, so staff can pull up a listing by either without needing extra plugins.
+ * Extends the boat list table search to match Stock Number and HIN.
  *
- * This does not implement the search itself. DC\AJAX_Handlers::search_stock_and_hin()
- * is already registered on 'posts_search' for every request, admin included,
- * and ORs an EXISTS subquery against the given meta keys onto WP's title and
- * content match. It acts only on queries carrying the two flags below, so all
- * this needs to do is set them on the admin list-table query. The frontend
- * inventory search opts in the same way, via
- * DC\AJAX_Handlers::build_inventory_query_args(), which keeps one copy of the
- * SQL behind both.
- *
- * The frontend also passes dc_search_extra_taxonomies for boat_type, because a
- * visitor searching "pontoon" is naming a category rather than a listing. That
- * is deliberately left off here: staff searching this screen are looking up a
- * specific unit, and the Location and category columns plus the filter
- * dropdowns already cover browsing by taxonomy.
+ * Sets the dc_search_extra_meta_keys query var, which
+ * DC\AJAX_Handlers::search_stock_and_hin() uses to add the meta match to the
+ * search clause.
  *
  * @param WP_Query $query Current query.
  */
-add_action('pre_get_posts', 'dealers_choice_admin_search_stock_and_hin');
 function dealers_choice_admin_search_stock_and_hin($query) {
     if (!is_admin() || !$query->is_main_query() || 'boat' !== $query->get('post_type')) {
         return;
     }
 
-    // is_search() is false when the search box is submitted empty, in which
-    // case core generates no search clause for the filter to extend anyway.
     if (!$query->is_search()) {
         return;
     }
@@ -2188,22 +2190,16 @@ function dealers_choice_admin_search_stock_and_hin($query) {
     $query->set('dc_search_extra_meta_keys', ['boat_stock_number', 'boat_hin']);
 }
 
-/**
- * Add a Location filter dropdown to the Inventory list table.
- *
- * Location is a taxonomy, so the Location column cannot be made sortable the
- * way stock_number/saleprice/boat_year are (there is no single meta value to
- * order on). A filter dropdown gives dealers with multiple locations the same
- * practical result: they select a location and see only that location's boats.
- *
- * No pre_get_posts handling is needed. The 'location' taxonomy is registered
- * with query_var => true, and WP_Taxonomy::add_rewrite_rules() registers the
- * query var in the admin even for a taxonomy that is not publicly queryable,
- * so the main list-table query picks up ?location=<slug> on its own.
- *
- * @param string $post_type The post type of the list table being rendered.
- */
 add_action('restrict_manage_posts', 'dealers_choice_location_filter_dropdown');
+/**
+ * Outputs a Location filter dropdown on the boat list table.
+ *
+ * Lists every location term, including empty ones, and outputs nothing when no
+ * locations exist. The selected slug filters the list through the `location`
+ * query var.
+ *
+ * @param string $post_type Post type of the list table being rendered.
+ */
 function dealers_choice_location_filter_dropdown($post_type) {
     if ('boat' !== $post_type) {
         return;
@@ -2211,20 +2207,10 @@ function dealers_choice_location_filter_dropdown($post_type) {
 
     $taxonomy = 'location';
 
-    // get_terms() returns a WP_Error for an unregistered taxonomy, which
-    // wp_dropdown_categories() would then try to walk as a term list.
     if (!taxonomy_exists($taxonomy)) {
         return;
     }
 
-    // hide_empty is false so every configured location stays selectable even
-    // when its boats are all drafts (term counts only include published posts);
-    // hide_if_empty suppresses the whole control on a site with no locations,
-    // which in turn keeps the Filter button from appearing on its own.
-    //
-    // The "All Locations" option is emitted with value="0", which PHP's empty()
-    // treats as unset, so WP_Query::parse_tax_query() skips the taxonomy clause
-    // entirely and the unfiltered list is returned.
     wp_dropdown_categories([
         'taxonomy'        => $taxonomy,
         'name'            => $taxonomy,
@@ -2239,7 +2225,7 @@ function dealers_choice_location_filter_dropdown($post_type) {
 }
 
 /**
- * Create an admin dashboard widget to show inventory stats
+ * Registers the Inventory Stats dashboard widget.
  */
 function dealers_choice_register_dashboard_widgets() {
     wp_add_dashboard_widget(
@@ -2251,7 +2237,10 @@ function dealers_choice_register_dashboard_widgets() {
 add_action('wp_dashboard_setup', 'dealers_choice_register_dashboard_widgets');
 
 /**
- * Display inventory stats in the dashboard widget
+ * Renders the Inventory Stats dashboard widget.
+ *
+ * Shows the published boat count, last sync time, the five most recently
+ * modified boats, and links to the inventory list and the IMS.
  */
 function dealers_choice_display_inventory_stats() {
     $total_boats = wp_count_posts('boat')->publish;
@@ -2282,18 +2271,20 @@ function dealers_choice_display_inventory_stats() {
 }
 
 /**
- * Fixes MIME type for Salesforce image downloads.
+ * Sets the file type for extensionless image uploads from the `name` query parameter.
  *
- * @param array  $data     File data.
- * @param string $file     Full path to the file.
- * @param string $filename The filename.
- * @param array  $mimes    Array of MIME types.
- * @return array Modified file data.
+ * Applies only when the filename has no extension, the `name` parameter has a
+ * jpg, jpeg, png, gif or webp extension, and WordPress did not detect a type.
+ *
+ * @param array         $data     File data: ext, type and proper_filename.
+ * @param string        $file     Full path to the file.
+ * @param string        $filename File name.
+ * @param string[]|null $mimes    Allowed MIME types keyed by extension pattern.
+ * @return array File data.
  */
 function dealers_choice_fix_mime_types($data, $file, $filename, $mimes) {
     $file_ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
-    // If the file has no extension, try to get it from the query string of the source URL.
     if (empty($file_ext) && isset($_GET['name'])) {
         $real_filename = sanitize_file_name($_GET['name']);
         $real_ext = strtolower(pathinfo($real_filename, PATHINFO_EXTENSION));

@@ -1,56 +1,8 @@
 <?php
 /**
- * Inventory Helper Class
- * 
- * Provides static helper methods for retrieving and filtering boat inventory
- * data. This class is primarily used for frontend displays and filtering
- * interfaces to get taxonomy term counts with active filters applied.
- * 
+ * Taxonomy term counts for the inventory filters.
+ *
  * @package DealersChoice
- * @subpackage Classes
- * @since 1.0.0
- * 
- * Functionality:
- * - Get total inventory count
- * - Retrieve taxonomy values with post counts
- * - Apply filters across multiple taxonomies
- * - Respect do_not_show_on_public_website meta field
- * - Optimized queries using direct wpdb calls
- * 
- * Available Taxonomy Methods:
- * - getTaxonomyValuesForBoatType()
- * - getTaxonomyValuesForCondition()
- * - getTaxonomyValuesForLocation()
- * - getTaxonomyValuesForYear()
- * - getTaxonomyValuesForMake()
- * - getTaxonomyValuesForModel()
- * - getTaxonomyValuesForPriceRange()
- * - getTaxonomyValuesForLength()
- * - getTaxonomyValuesForHorsepower()
- * - getTaxonomyValuesForPersonCapacity()
- * 
- * Filter Format:
- * Each method accepts $filters array with taxonomy => term_id pairs
- * Example: ['boat_type' => 123, 'condition' => 456]
- * 
- * Return Format:
- * Returns array with:
- * - 'terms': Array of term objects with counts
- * - 'total': Total count across all terms
- * 
- * Performance Optimization:
- * - Single database query per taxonomy (vs N queries)
- * - Uses JOIN for multi-taxonomy filtering
- * - Prepared statements for security
- * - Efficient post counting with GROUP BY
- * 
- * Public Website Filtering:
- * - Automatically excludes boats with do_not_show_on_public_website = 1
- * - Applied in all counting queries
- * 
- * Dependencies:
- * - WordPress taxonomy functions (get_terms)
- * - Direct wpdb queries for performance
  */
 namespace DC;
 
@@ -271,19 +223,15 @@ class Inventory {
             return ['terms' => [], 'total' => 0];
         }
 
-        // Build optimized query to get all counts at once
         $taxonomy = $args['taxonomy'];
         $term_ids = wp_list_pluck($terms, 'term_id');
         $term_id_placeholders = implode(',', array_fill(0, count($term_ids), '%d'));
         
-        // Build the JOIN clauses for additional taxonomy filters
+        // One JOIN set per active filter on another taxonomy.
         $tax_joins = '';
         $join_counter = 1;
         $join_params = [];
 
-        // The taxonomy name is interpolated into the SQL below (it can't be a
-        // placeholder in that position as written), so every taxArg must pass
-        // the allowlist in sanitizeTaxArgs() first. Never remove this call.
         $taxArgs = self::sanitizeTaxArgs($taxArgs);
 
         if (!empty($taxArgs)) {
@@ -294,19 +242,16 @@ class Inventory {
                 
                 $tax_joins .= " INNER JOIN {$wpdb->term_relationships} AS {$alias} ON p.ID = {$alias}.object_id";
                 
-                // Determine if we are querying by slug or term_id
                 $field = isset($tArg['field']) ? $tArg['field'] : 'term_id';
                 
                 if ($field === 'slug') {
                     $tax_term_placeholders = implode(',', array_fill(0, count($tax_terms), '%s'));
-                    // For slug, we need to join term_taxonomy AND terms
                     $tax_joins .= " INNER JOIN {$wpdb->term_taxonomy} AS tt{$join_counter} ON {$alias}.term_taxonomy_id = tt{$join_counter}.term_taxonomy_id";
                     $tax_joins .= " INNER JOIN {$wpdb->terms} AS t{$join_counter} ON tt{$join_counter}.term_id = t{$join_counter}.term_id";
                     $tax_joins .= " AND tt{$join_counter}.taxonomy = '{$tax_taxonomy}' AND t{$join_counter}.slug IN ({$tax_term_placeholders})";
                     
                     $join_params = array_merge($join_params, $tax_terms);
                 } else {
-                    // Default to ID
                     $tax_term_placeholders = implode(',', array_fill(0, count($tax_terms), '%d'));
                     $tax_joins .= " INNER JOIN {$wpdb->term_taxonomy} AS tt{$join_counter} ON {$alias}.term_taxonomy_id = tt{$join_counter}.term_taxonomy_id AND tt{$join_counter}.taxonomy = '{$tax_taxonomy}' AND tt{$join_counter}.term_id IN ({$tax_term_placeholders})";
                     
@@ -317,7 +262,7 @@ class Inventory {
             }
         }
         
-        // Query to get counts for all terms at once
+        // Counts published, publicly visible boats per term in a single query.
         $query = "
             SELECT tr.term_taxonomy_id, COUNT(DISTINCT p.ID) as count
             FROM {$wpdb->posts} p
@@ -333,7 +278,7 @@ class Inventory {
             GROUP BY tr.term_taxonomy_id
         ";
         
-        // Prepare query parameters: Joins first, then WHERE clause
+        // Placeholder order: JOIN params, then WHERE params.
         $query_params = array_merge(
             $join_params,
             [$taxonomy],
@@ -342,7 +287,6 @@ class Inventory {
         
         $results = $wpdb->get_results($wpdb->prepare($query, $query_params), OBJECT_K);
         
-        // Map counts to terms
         foreach ($terms as $term) {
             $count = isset($results[$term->term_taxonomy_id]) ? (int) $results[$term->term_taxonomy_id]->count : 0;
             $total += $count;
@@ -360,18 +304,14 @@ class Inventory {
     }
 
     /**
-     * Drop or clean any taxArg that isn't safe to put in the counts query.
+     * Validates and sanitizes tax args for the counts query.
      *
-     * - 'taxonomy' must be a registered taxonomy attached to the boat post
-     *   type (it is interpolated into SQL, so this is the injection guard)
-     * - 'field' must be 'slug' or 'term_id'
-     * - slugs go through sanitize_title(), term IDs through absint(); nested
-     *   arrays and empty values are dropped
-     * - a taxArg left with no terms is dropped entirely, since an empty
-     *   IN () is a SQL error
+     * Keeps only taxonomies registered on the boat post type and fields 'slug' or
+     * 'term_id'. Slugs pass through sanitize_title() and IDs through absint(); nested,
+     * empty and 'all' values are dropped, and a tax arg with no remaining terms is removed.
      *
-     * @param array $taxArgs Untrusted tax args.
-     * @return array Safe tax args.
+     * @param array $taxArgs Tax args, each with 'taxonomy', 'field' and 'terms'.
+     * @return array Sanitized tax args.
      */
     static private function sanitizeTaxArgs($taxArgs) {
         $clean = [];

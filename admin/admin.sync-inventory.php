@@ -1,53 +1,28 @@
 <?php
 /**
- * Admin Sync Inventory Page
- * 
- * Provides an administrative interface for manually triggering inventory synchronization
- * and viewing sync logs. This page allows administrators to:
- * - Manually trigger inventory sync via AJAX
- * - View last sync timestamp
- * - Enable/disable logging
- * - View recent sync logs with context details
- * - Clear log history
- * 
+ * Sync Inventory admin page: manual sync, logging toggle and recent log viewer.
+ *
  * @package DealersChoice
- * @subpackage Admin
- * @since 1.0.0
- * 
- * Features:
- * - Real-time AJAX sync with status updates
- * - Comprehensive logging viewer with expandable context
- * - Log filtering and management
- * - Visual feedback for sync status (loading/success/error)
- * 
- * Security:
- * - Requires 'manage_options' capability
- * - AJAX requests protected with nonce verification
- * - All output escaped for security
- * 
- * Dependencies:
- * - WordPress AJAX API
- * - jQuery for AJAX requests
- * - DC\InventorySync class
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Handle AJAX request to trigger sync
 add_action('wp_ajax_dealers_choice_trigger_sync', 'dealers_choice_ajax_trigger_sync');
 
+/**
+ * AJAX handler that runs an inventory sync, optionally forced.
+ *
+ * @return void
+ */
 function dealers_choice_ajax_trigger_sync() {
-    // Verify nonce
     check_ajax_referer('dealers_choice_sync_nonce', 'nonce');
     
-    // Check user capabilities
     if (!current_user_can('manage_options')) {
         wp_send_json_error(['message' => 'You do not have permission to perform this action.']);
     }
     
-    // Get API credentials
     $client_id = get_option('dealers_choice_client_id');
     $api_key = get_option('dealers_choice_api_key');
     
@@ -55,11 +30,9 @@ function dealers_choice_ajax_trigger_sync() {
         wp_send_json_error(['message' => 'Please configure API credentials first.']);
     }
     
-    // Check if force sync is enabled
     $force_sync = isset($_POST['force_sync']) && $_POST['force_sync'] === 'true';
     
     try {
-        // Initialize sync class and trigger sync
         $sync = new \DC\InventorySync($client_id, $api_key);
         $sync->sync_inventory(false, $force_sync);
         
@@ -75,16 +48,17 @@ function dealers_choice_ajax_trigger_sync() {
 }
 
 /**
- * Enqueue admin styles and scripts for sync page
+ * Enqueues the admin stylesheet and script, with sync AJAX data, on DealersChoice admin pages.
+ *
+ * @param string $hook Current admin page hook suffix.
+ * @return void
  */
 function dealers_choice_sync_enqueue_assets($hook) {
     
-    // Only load scripts on sync page
     if (strpos($hook, 'dealers-choice') === false) {
         return;
     }
 
-    // Load admin styles
     wp_enqueue_style(
         'dealers-choice-admin-style',
         plugin_dir_url(__FILE__) . 'admin-style.css',
@@ -92,7 +66,6 @@ function dealers_choice_sync_enqueue_assets($hook) {
         '1.0.0'
     );
     
-    // Enqueue admin scripts
     wp_enqueue_script(
         'dealers-choice-admin-script',
         plugin_dir_url(__FILE__) . 'admin-scripts.js',
@@ -101,7 +74,6 @@ function dealers_choice_sync_enqueue_assets($hook) {
         true
     );
     
-    // Localize script with data
     wp_localize_script(
         'dealers-choice-admin-script',
         'dealersChoiceAdmin',
@@ -113,6 +85,11 @@ function dealers_choice_sync_enqueue_assets($hook) {
 }
 add_action('admin_enqueue_scripts', 'dealers_choice_sync_enqueue_assets');
 
+/**
+ * Renders the Sync Inventory page and handles its logging and clear-logs forms.
+ *
+ * @return void
+ */
 function dealers_choice_sync_page() {
     $client_id = get_option('dealers_choice_client_id');
     $api_key = get_option('dealers_choice_api_key');
@@ -120,14 +97,14 @@ function dealers_choice_sync_page() {
     $recent_logs = get_option('dealers_choice_recent_logs', []);
     $log_enabled = get_option('dealers_choice_log_enabled', '1');
     
-    // Handle settings update
+    // Save the logging toggle.
     if (isset($_POST['dealers_choice_save_settings']) && check_admin_referer('dealers_choice_settings_nonce')) {
         $log_enabled = isset($_POST['dealers_choice_log_enabled']) ? '1' : '0';
         update_option('dealers_choice_log_enabled', $log_enabled);
         echo '<div class="notice notice-success"><p>Settings saved successfully.</p></div>';
     }
     
-    // Handle clear logs action
+    // Clear the stored logs.
     if (isset($_POST['dealers_choice_clear_logs']) && check_admin_referer('dealers_choice_clear_logs_nonce')) {
         delete_option('dealers_choice_recent_logs');
         $recent_logs = [];
@@ -204,7 +181,7 @@ function dealers_choice_sync_page() {
                     </thead>
                     <tbody>
                         <?php 
-                        // Show most recent logs first
+                        // Newest first.
                         $recent_logs = array_reverse($recent_logs);
                         foreach ($recent_logs as $log): 
                             $level_class = '';

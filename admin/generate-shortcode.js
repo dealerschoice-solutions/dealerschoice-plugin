@@ -1,17 +1,12 @@
 /**
- * DealersChoice Shortcode Builder — Modal UI
+ * DealersChoice shortcode builder modal.
  *
- * Builds and manages the shortcode insertion modal.  The modal is driven
- * entirely by the `dcShortcodeBuilder.schema` object localized from PHP
- * (see classes/class.insert-shortcodes.php → dc_get_shortcode_schema()).
- *
- * Insertion targets:
- *  • TinyMCE plugin button  → passes its own editor.id directly.
- *  • media_buttons button   → uses the last editor that received focus,
- *                             falling back to the main 'content' editor.
+ * Renders a shortcode picker and options form from dcShortcodeBuilder.schema
+ * and inserts the built shortcode into the target editor. The TinyMCE button
+ * passes its editor ID; the media button uses its surrounding editor, else the
+ * last focused editor, else 'content'.
  *
  * @package DealersChoice
- * @since   1.0.0
  */
 /* global dcShortcodeBuilder, tinymce */
 ( function ( $ ) {
@@ -51,7 +46,7 @@
             '</div>' +
         '</div>';
 
-    // ── Initialise ────────────────────────────────────────────────────────────
+    // ── Initialize ────────────────────────────────────────────────────────────
 
     $( function () {
         $( 'body' ).append( MODAL_HTML );
@@ -72,19 +67,14 @@
             } );
         }
 
-        // WordPress's TinyMCE inline-init script runs in the footer before
-        // deferred scripts, so some editors (including pre-existing ACF blocks)
-        // are already initialised by the time this code runs.  Iterate the
-        // current editors array and attach listeners to any we would otherwise
-        // miss via the AddEditor event.
+        // Editors that already exist.
         if ( tinymce.editors && tinymce.editors.length ) {
             for ( var i = 0; i < tinymce.editors.length; i++ ) {
                 attachFocusListener( tinymce.editors[ i ] );
             }
         }
 
-        // Catch every editor added after this point (new ACF Flexible Content
-        // rows added dynamically, etc.).
+        // Editors added later, such as new ACF Flexible Content rows.
         tinymce.on( 'AddEditor', function ( e ) {
             attachFocusListener( e.editor );
         } );
@@ -93,35 +83,29 @@
     // ── Event bindings ────────────────────────────────────────────────────────
 
     function bindModalEvents() {
-        // media_buttons toolbar button.  Use event delegation on document so
-        // buttons added dynamically by ACF Flexible Content are also captured.
-        // Derive the target editor ID from the surrounding wp-{id}-editor-tools
-        // wrapper that wp_editor() always generates — this is reliable even when
-        // multiple WYSIWYG fields share the same page.
+        // Media button (delegated): targets the editor from its wp-{id}-editor-tools wrapper.
         $( document ).on( 'click', '.dc-generate-shortcode-button', function () {
             var $tools   = $( this ).closest( '[id$="-editor-tools"]' );
             var editorId;
             if ( $tools.length ) {
-                // Strip the 'wp-' prefix and '-editor-tools' suffix to get the
-                // bare editor ID (e.g. 'wp-content-editor-tools' → 'content').
+                // 'wp-content-editor-tools' becomes 'content'.
                 editorId = $tools.attr( 'id' )
                     .replace( /^wp-/, '' )
                     .replace( /-editor-tools$/, '' );
             } else {
-                // Fallback for any edge-case where the wrapper isn't found.
+                // No wrapper: use the active editor, else the last focused one.
                 var active = ( typeof tinymce !== 'undefined' ) && tinymce.activeEditor;
                 editorId = active ? tinymce.activeEditor.id : lastFocusedEditorId;
             }
             dcOpenShortcodeModal( editorId );
         } );
 
-        // TinyMCE toolbar button (dc-tinymce-plugin.js) dispatches this event
-        // with the exact editor.id so we always target the right field.
+        // TinyMCE toolbar button (dc-tinymce-plugin.js) passes its editor ID.
         document.addEventListener( 'dc:open-shortcode-modal', function ( e ) {
             dcOpenShortcodeModal( e.detail && e.detail.editorId );
         } );
 
-        // Close via × button or overlay click.
+        // Close on the close button or an overlay click.
         $( '#dc-modal-close' ).on( 'click', closeModal );
         $( '#dc-modal-overlay' ).on( 'click', function ( e ) {
             if ( $( e.target ).is( '#dc-modal-overlay' ) ) {
@@ -136,16 +120,15 @@
             }
         } );
 
-        // Insert shortcode button.
         $( '#dc-modal-insert' ).on( 'click', insertShortcode );
     }
 
     // ── Public API (called by dc-tinymce-plugin.js) ───────────────────────────
 
     /**
-     * Open the modal, targeting a specific TinyMCE editor by ID.
+     * Opens the modal on the shortcode picker and focuses the close button.
      *
-     * @param {string} editorId  The TinyMCE editor id to insert into.
+     * @param {string} [editorId] Editor ID to insert into. Defaults to the last focused editor.
      */
     window.dcOpenShortcodeModal = function ( editorId ) {
         targetEditorId = editorId || lastFocusedEditorId;
@@ -197,7 +180,6 @@
 
         $( '#dc-modal-title' ).html( DC_SVG_INLINE + escHtml( config.label ) );
 
-        // Back link.
         var $back = $( '<button type="button" class="dc-form-back">&#8592; Back</button>' );
         $back.on( 'click', renderPicker );
         $body.append( $back );
@@ -215,7 +197,6 @@
             $body.append( $grid );
         }
 
-        // Store which shortcode is being configured.
         $( '#dc-modal-insert' ).data( 'shortcode-tag', tag ).prop( 'disabled', false );
     }
 
@@ -265,7 +246,7 @@
                     $input = $( '<select></select>' ).attr( { id: inputId, name: attr } );
                     if ( field.multiple ) {
                         $input.attr( 'multiple', 'multiple' );
-                        // Blank "no filter" option is implicit when nothing is selected.
+                        // No selection means no filter.
                     } else {
                         $input.append( '<option value="">— Any —</option>' );
                     }
@@ -294,10 +275,10 @@
                 $input = $( '<input type="text">' ).attr( { id: inputId, name: attr } );
         }
 
-        $row.prepend( $label ); // label first (already appended above; re-order)
+        $row.prepend( $label );
         $row.empty().append( $label ).append( $input );
 
-        // Re-append hints that were built above.
+        // Hints follow the input.
         if ( field.type === 'taxonomy' && field.multiple && field.terms && field.terms.length > 0 ) {
             $row.append( $( '<span class="dc-field-hint">Hold Ctrl / Cmd to select multiple.</span>' ) );
         }
@@ -332,13 +313,13 @@
 
             var value;
             if ( field.type === 'taxonomy' && field.multiple ) {
-                var selected = $input.val(); // returns array for multiple selects.
+                var selected = $input.val();
                 value = ( selected && selected.length ) ? selected.join( ',' ) : '';
             } else {
                 value = $input.val() || '';
             }
 
-            // Only include attributes that differ from the default to keep shortcodes clean.
+            // Include only non-empty attributes that differ from the default.
             var def = ( field.default !== undefined ) ? String( field.default ) : '';
             if ( String( value ) !== def && value !== '' ) {
                 attrs.push( attr + '="' + value.replace( /"/g, '&quot;' ) + '"' );
@@ -347,7 +328,7 @@
 
         var shortcode = '[' + tag + ( attrs.length ? ' ' + attrs.join( ' ' ) : '' ) + ']';
 
-        // Attempt TinyMCE insertion first, then fall back to textarea append.
+        // Insert into the visual editor when active; otherwise into the textarea at the cursor.
         if ( typeof tinymce !== 'undefined' ) {
             var editor = tinymce.get( targetEditorId );
             if ( editor && ! editor.isHidden() ) {
@@ -357,7 +338,6 @@
             }
         }
 
-        // Plain textarea fallback (Text tab active, or non-TinyMCE field).
         var textarea = document.getElementById( targetEditorId );
         if ( textarea ) {
             var start = textarea.selectionStart;

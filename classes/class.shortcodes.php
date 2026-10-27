@@ -1,110 +1,8 @@
 <?php
 /**
- * Shortcodes Handler
- * 
- * Registers and handles all plugin shortcodes for embedding inventory functionality
- * into posts, pages, and widgets.
- * 
+ * Registers and renders the plugin's front-end shortcodes.
+ *
  * @package DealersChoice
- * @subpackage Classes
- * @since 1.0.0
- * 
- * Available Shortcodes:
- * 
- * [dealerschoice_inventory]
- * Displays the full inventory listing with filters
- * Attributes:
- * - posts_per_page: Number of boats per page (default: 12)
- * - show_filters: Show filter sidebar (default: true)
- * - show_search: Show search box (default: true)
- * - show_sort: Show sort dropdown (default: true)
- * - category: Constrain to one or more boat_type slugs, comma separated
- * - condition: Constrain to one or more condition slugs, comma separated
- * - status: Constrain to one or more boat_status slugs, comma separated
- * - location: Constrain to one or more location slugs, comma separated
- * - make: Constrain to one or more make slugs, comma separated
- * - promotion: Constrain to one or more dc_promotions slugs, comma separated:
- *           promotion="clearance"
- *           promotion="featured,clearance"
- *         Term slugs are whatever the dealer created under Inventory >
- *         Promotions; the plugin ships no vocabulary of its own. Unlike the
- *         attributes above, promotions never render as a filter widget.
- * - lock: Constrain a taxonomy that has no dedicated attribute above, as
- *         "key:slug" pairs separated by "|" (slugs within a key separated
- *         by ","):
- *           lock="price:50000-100000"
- *           lock="year:2026|length:20-24"
- *         Keys come from AJAX_Handlers::get_lockable_taxonomy_map(). Setting a
- *         key that also has its own attribute is allowed and merges with it.
- * - lock_notice: Show the "Showing: ..." text for the active constraints
- *         (default: false). Set lock_notice="true" on the rare page where the
- *         constraint isn't already obvious from the page title or heading, so
- *         visitors aren't left wondering why the list is short.
- *
- * ALL of the constraint attributes above are enforced server-side on every
- * AJAX request, so they survive "Clear All Filters", pagination, sorting, the
- * header location selector, URL parameters and show_filters="false". Any
- * constrained taxonomy has its sidebar widget hidden, since there is nothing
- * left for the visitor to change.
- *
- * For a filter the visitor SHOULD be able to change, do not set an attribute.
- * Link to the page with a URL parameter instead (?condition=new), which
- * pre-checks the filter while leaving the widget visible and adjustable.
- *
- * Shop Other Locations: when 'location' is set and the "Shop Other Locations"
- * setting (dealerschoice_show_other_locations) is on, a visitor who filters or
- * searches sees up to 3 exact matches from the other locations below the last
- * page of results. See AJAX_Handlers::get_other_locations_html().
- *
- * [dealerschoice_slider]
- * Displays a horizontal slider/carousel of boats
- * Attributes:
- * - limit: Number of boats to show (default: 6)
- * - category: Filter by category slug
- * - condition: Filter by condition slug
- * - location: Filter by location slug
- * - promotion: Scope the slider to one or more dc_promotions term slugs,
- *        comma separated, e.g. promotion="featured"
- * - tax: Additional taxonomy constraint, same "key:slug" syntax as 'lock'
- *        above, e.g. tax="condition:new"
- * - orderby: Sort by (date, price, year, length, rand) (default: date)
- * - order: Sort direction (ASC, DESC) (default: DESC)
- * - slides_to_show: Number of slides visible at once (default: 3)
- * - autoplay: Automatically advance slides (default: false)
- * - autoplay_speed: Milliseconds between auto-advances, only used when
- *        autoplay is enabled (default: 3000)
- *
- * [dealerschoice_filters]
- * Displays just the filter sidebar (useful for custom layouts)
- * 
- * [dealerschoice_favorites]
- * Displays the user's favorite boats using localStorage and AJAX.
- * 
- * [dealerschoice_location_list]
- * Displays the list of locations as buttons for the location selector popup in the header.
- * 
- * [dealerschoice_boat_quiz]
- * Displays the step-by-step boat finder quiz.
- * Attributes:
- * - title: Quiz heading (default: 'Find Your Perfect Boat')
- * - subtitle: Sub-heading (default: descriptive tagline)
- * - submit_label: Label on the final submit button (default: 'Find My Perfect Boat')
- *
- * [dealerschoice_finance_calculator]
- * Displays the generic client-side loan payment calculator, with a full
- * monetization summary and an expandable amortization schedule.
- * Attributes:
- * - title: Heading above the form (default: 'Estimate Your Payment')
- * - default_amount: Pre-filled amount financed (default: '', blank)
- *
- * The "quick" calculator shown automatically on single-boat.php is rendered
- * via DC\Shortcodes::render_quick_finance_calculator() and is not a
- * registered shortcode (it isn't user-insertable).
- *
- * Dependencies:
- * - WordPress shortcode API
- * - DC\Template_Loader
- * - DC\Inventory class
  */
 
 namespace DC;
@@ -113,10 +11,14 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * Front-end shortcodes: inventory listing, slider, filters, favorites, location list,
+ * boat quiz and finance calculators.
+ */
 class Shortcodes {
     
     /**
-     * Initialize shortcodes
+     * Registers all shortcodes.
      */
     public static function init() {
         add_shortcode('dealerschoice_inventory', [__CLASS__, 'inventory_shortcode']);
@@ -129,13 +31,9 @@ class Shortcodes {
     }
 
     /**
-     * Enqueue the Reveal Price script for any shortcode that renders inventory cards.
+     * Enqueues and localizes the Reveal Price script when prices are gated.
      *
-     * Only needed when prices are gated. Enqueuing from the shortcode (rather than from
-     * wp_enqueue_scripts) means the script follows the markup, so inventory rendered from
-     * a block, widget, or page-builder template gets a working handler too. The script is
-     * registered with $in_footer = true, so a shortcode-time enqueue during the_content
-     * still prints, and wp_localize_script still applies.
+     * Called by shortcodes that render inventory cards.
      */
     public static function enqueue_reveal_price_assets() {
         if (get_option('dealers_choice_always_show_price', '0') === '1') {
@@ -146,19 +44,15 @@ class Shortcodes {
     }
 
         /**
-         * Favorites Shortcode
+         * Renders [dealerschoice_favorites]: boats saved in localStorage, loaded via AJAX.
          *
-         * [dealerschoice_favorites]
-         *
-         * Displays the user's favorite boats using localStorage and AJAX.
+         * @param array|string $atts Shortcode attributes (unused).
+         * @return string HTML output.
          */
         public static function favorites_shortcode($atts) {
-            // Enqueue public styles and favorites JS
             wp_enqueue_style('dealerschoice-public');
             wp_enqueue_script('dealerschoice-favorites');
             wp_enqueue_script('dealerschoice-public');
-            // Favorites renders the same inventory-block.php cards, so it needs the
-            // Reveal Price handler too or its "Reveal Price" buttons do nothing.
             self::enqueue_reveal_price_assets();
 
             ob_start();
@@ -218,9 +112,16 @@ class Shortcodes {
         }
 
     /**
-     * Full inventory listing shortcode
+     * Renders [dealerschoice_inventory]: the full listing with filters, search, sort and pagination.
      *
-     * [dealerschoice_inventory posts_per_page="12" category="pontoon"]
+     * The category (alias categories), condition, status, location, make and promotion
+     * attributes and the lock attribute ("key:slug,slug|key:slug") are locked
+     * constraints enforced server-side; their filter widgets are hidden. lock_notice
+     * shows a "Showing: ..." line for them. The first page of results and the
+     * ItemList schema are rendered server-side.
+     *
+     * @param array|string $atts Shortcode attributes.
+     * @return string HTML output.
      */
     public static function inventory_shortcode($atts) {
         $atts = shortcode_atts([
@@ -239,22 +140,20 @@ class Shortcodes {
             'lock_notice' => false,
         ], $atts, 'dealerschoice_inventory');
 
-        // Support 'categories' attribute as alias for 'category'
         if (empty($atts['category']) && !empty($atts['categories'])) {
             $atts['category'] = $atts['categories'];
         }
 
-        // Start output buffering
         ob_start();
 
-        // Enqueue assets
         wp_enqueue_style('dealerschoice-public');
         wp_enqueue_script('dealerschoice-public');
-        wp_enqueue_script('dealerschoice-favorites');
+        if (dealerschoiceIsFavoritesEnabled()) {
+            wp_enqueue_script('dealerschoice-favorites');
+        }
         self::enqueue_reveal_price_assets();
 
-        // Ensure that location, condition, category, and make are arrays;
-        // single values and comma-separated strings are converted to arrays
+        // Convert comma-separated attribute values to arrays.
         if (!is_array($atts['location'])) {
             $atts['location'] = array_filter(array_map('trim', explode(',', $atts['location'])));
         }
@@ -271,22 +170,7 @@ class Shortcodes {
             $atts['make'] = array_filter(array_map('trim', explode(',', $atts['make'])));
         }
 
-        // Every filter attribute on this shortcode is a hard constraint, not a
-        // changeable default. An author writing category="bowrider" means "this
-        // page shows bowriders", which is also why templates/filters.php hides
-        // the corresponding widget: nobody hides the control for a value the
-        // visitor is meant to change.
-        //
-        // Historically these attributes only pre-checked sidebar checkboxes,
-        // leaving the constraint in client-side state where "Clear All Filters",
-        // the header location selector and URL parameters could each escape it.
-        // That was a consequence of the results being fully AJAX-driven rather
-        // than a design decision, and it also disagreed with
-        // slider_shortcode(), which has always built its tax_query server-side
-        // from the same attribute names.
-        //
-        // For a filter the visitor SHOULD be able to change, link to the page
-        // with a URL parameter (?condition=new) instead of setting an attribute.
+        // Filter attributes become locked constraints.
         $locked_raw = [
             'category'  => $atts['category'],
             'condition' => $atts['condition'],
@@ -302,35 +186,19 @@ class Shortcodes {
             );
         }
 
-        // Validates keys against the lockable map, drops unknown ones and
-        // forces every slug through sanitize_title().
+        // Validate keys against the lockable map and sanitize slugs.
         $locked = AJAX_Handlers::sanitize_locked_constraints($locked_raw);
 
-        // lock="" remains supported for the taxonomies with no dedicated
-        // attribute (price, length, capacity, horsepower, year, model) and
-        // merges with any attribute constraint on the same taxonomy rather than
-        // overwriting it, so the two can be combined without one silently
-        // discarding the other.
+        // Merge the lock attribute into the attribute constraints.
         foreach (self::parse_lock_attribute($atts['lock']) as $lock_key => $lock_terms) {
             $locked[$lock_key] = isset($locked[$lock_key])
                 ? array_values(array_unique(array_merge($locked[$lock_key], $lock_terms)))
                 : $lock_terms;
         }
 
-        // $filters drives templates/filters.php: which widgets render and
-        // which are hidden as already-applied. Starts empty and is populated
-        // from $locked below, so the attributes and the sidebar can't drift.
-        //
-        // $count_filters additionally carries every locked constraint, so the
-        // term counts beside each checkbox reflect the true scope of the page.
-        // Without this a promotion-scoped listing would advertise "Pontoon
-        // (47)" and then return three boats when clicked.
-        //
-        // These are separate on purpose. Locked constraints must narrow the
-        // counts, but only constraints that correspond to a real sidebar
-        // widget may enter $filters. dc_promotions has no widget and must
-        // never appear in the filter sidebar, which is why it is absent from
-        // get_filter_taxonomy_map() and present only in the lockable map.
+        // $filters tells templates/filters.php which widgets are already applied
+        // (locked keys that have a sidebar widget). $count_filters holds every
+        // locked constraint, keyed by taxonomy, to scope the term counts.
         $filters = [
             'location'         => false,
             'condition'        => false,
@@ -350,8 +218,6 @@ class Shortcodes {
         $count_filters = $filters;
 
         foreach ($locked as $lock_key => $lock_terms) {
-            // Inventory::getTaxonomyValuesFor*() treats the array key as the
-            // taxonomy name, so the count array is keyed by taxonomy.
             $count_filters[$lockable_map[$lock_key]] = $lock_terms;
 
             if (isset($filter_map[$lock_key])) {
@@ -359,7 +225,7 @@ class Shortcodes {
             }
         }
 
-        // Check for 'notfound' parameter
+        // Notice for ?notfound=1 redirects from removed boats.
         $not_found_message = '';
         if (isset($_GET['notfound']) && $_GET['notfound'] === '1') {
             $not_found_message = '<div class="dealerschoice-notification error" style="background: #fff3f3; border-left: 4px solid #d63638; padding: 15px; margin-bottom: 20px;">
@@ -367,8 +233,7 @@ class Shortcodes {
             </div>';
         }
 
-        // Get filter data. Counts use $count_filters so they respect locked
-        // constraints; the widgets themselves are driven by $filters below.
+        // Filter term counts, scoped by the locked constraints.
         if (class_exists('\DC\Inventory')) {
             $locations = \DC\Inventory::getTaxonomyValuesForLocation($count_filters);
             $conditions = \DC\Inventory::getTaxonomyValuesForCondition($count_filters);
@@ -386,20 +251,35 @@ class Shortcodes {
             $priceRanges = $lengths = $horsepowers = $capacities = [];
         }
 
-        // Wrapper data attributes, assembled here to keep the markup readable.
+        // Server-render the first page of results, pagination and ItemList schema.
+        // The JS skips its first AJAX request when its state matches data-ssr-state.
+        $initial = self::get_initial_inventory_state($atts, $locked);
+        $initial_render = AJAX_Handlers::render_inventory_results(
+            $initial['filters'],
+            $initial['query'],
+            $initial['sortBy'],
+            $initial['page'],
+            AJAX_Handlers::get_posts_per_page($atts['posts_per_page']),
+            $locked,
+            $initial['pageUrl']
+        );
+
         $wrapper_atts = ' data-posts-per-page="' . absint($atts['posts_per_page']) . '"';
+
+        $wrapper_atts .= ' data-ssr-state="' . esc_attr(wp_json_encode([
+            'filters'      => (object) $initial['filters'],
+            'page'         => $initial['page'],
+            'sortBy'       => $initial['sortBy'],
+            'query'        => $initial['query'],
+            'postsPerPage' => absint($atts['posts_per_page']),
+        ])) . '"';
 
         if (!empty($locked)) {
             $wrapper_atts .= ' data-locked="' . esc_attr(wp_json_encode($locked)) . '"';
         }
 
-        // When location is locked, the sidebar's location widget is hidden and
-        // the constraint can't be relaxed client-side. If the site has a header
-        // location selector, choosing a different location on this page would
-        // AND against the locked term and strand the visitor on a permanent
-        // zero-results page. Hand the JS a destination to send them to instead.
-        // Omitted when this page IS the site-wide inventory page, since
-        // redirecting to ourselves would only reapply the same lock.
+        // With a locked location, give the JS the main inventory page URL to send
+        // visitors to when they pick another location, unless this is that page.
         if (isset($locked['location']) && function_exists('dealers_choice_get_inventory_page_url')) {
             $handoff      = dealers_choice_get_inventory_page_url();
             $current_page = get_permalink();
@@ -416,10 +296,7 @@ class Shortcodes {
             <div id="inventory-wrapper" class="dealerschoice-inventory-wrapper"<?php echo $wrapper_atts; ?>>
                 <?php echo $not_found_message; ?>
                 <?php
-                // State the locked constraint in visible text. The sidebar
-                // hides widgets it considers already-applied, so without this
-                // the visitor (and any assistive tech) has no way to tell why
-                // the listing is narrower than the full inventory.
+                // Visible "Showing: ..." text for the locked constraints.
                 if (!empty($locked) && filter_var($atts['lock_notice'], FILTER_VALIDATE_BOOLEAN)) {
                     $lock_labels = self::get_lock_labels($locked);
 
@@ -435,7 +312,6 @@ class Shortcodes {
                 <div class="dealerschoice-layout">
 
                     <?php if ($atts['show_filters']): ?>
-                    <!-- Mobile Filter Toggle -->
                     <div id="mobile-filter-toggle" class="mobile-filter-toggle">
                         <button type="button" aria-label="Toggle Filters">
                             <i class="fa-light fa-filter"></i>
@@ -444,7 +320,6 @@ class Shortcodes {
                         </button>
                     </div>
 
-                    <!-- Filters Sidebar -->
                     <aside id="inventory-filters" class="dealerschoice-filters">
                         <div id="mobile-filter-close" class="mobile-filter-close">
                             <button type="button" aria-label="Close Filters">
@@ -471,10 +346,8 @@ class Shortcodes {
                     </aside>
                     <?php endif; ?>
 
-                    <!-- Results Area -->
                     <div id="inventory-list" class="dealerschoice-results">
 
-                        <!-- Search and Sort Controls -->
                         <?php if ($atts['show_search'] || $atts['show_sort']): ?>
                         <div class="search-sort-wrapper">
                             <div class="search-sort-inner">
@@ -509,23 +382,24 @@ class Shortcodes {
                         </div>
                         <?php endif; ?>
 
-                        <!-- Results Container -->
+                        <!-- Live region announcing AJAX result updates; empty on initial load. -->
+                        <div id="inventory-results-status" class="dc-screen-reader-text" role="status" aria-live="polite"></div>
+
                         <div id="inventory-results" class="inventory-results">
-                            <div class="loading-spinner">
-                                <i class="fa-light fa-arrows-rotate-reverse"></i>
-                                Loading inventory...
-                            </div>
+                            <?php echo $initial_render['results']; ?>
                         </div>
 
-                        <!-- Pagination Container -->
-                        <div class="pagination-wrapper"></div>
+                        <div class="pagination-wrapper"><?php echo $initial_render['pagination']; ?></div>
 
                         <?php if (isset($locked['location'])): ?>
-                        <!-- Shop Other Locations Container (filled by AJAX on the last page of filtered results) -->
+                        <!-- Shop Other Locations results, filled by AJAX on the last page of filtered results. -->
                         <div class="dealerschoice-other-locations-wrapper"></div>
                         <?php endif; ?>
                     </div>
                 </div>
+                <?php if (!empty($initial_render['schema'])): ?>
+                <script type="application/ld+json" id="dealerschoice-itemlist-schema"><?php echo wp_json_encode($initial_render['schema'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG); ?></script>
+                <?php endif; ?>
             </div>
         </div>
         <?php
@@ -534,23 +408,99 @@ class Shortcodes {
     }
 
     /**
-     * Parse the 'lock' / 'tax' shortcode attribute into validated constraints.
+     * Builds the listing's initial state from the request, matching the JS init block.
      *
-     * Syntax: "key:slug" pairs separated by "|", with multiple slugs for one
-     * key separated by ",". Slugs within a key are ORed; separate keys are
-     * ANDed. Examples:
+     * Reads filters from ?location, condition, status, category, make, model, price,
+     * length, horsepower (scalar or key[]) and ?boat_year (as 'year'), skipping locked
+     * keys; ?inventory_page; ?q when search is shown; and the default sort when the
+     * sort dropdown is shown. Also builds the canonical page URL from that state.
      *
-     *     lock="promotion:clearance"
-     *     lock="promotion:featured,clearance"
-     *     lock="promotion:clearance|location:north-shore"
+     * @param array $atts   Parsed shortcode attributes.
+     * @param array $locked Validated locked constraints.
+     * @return array{filters:array,page:int,sortBy:string,query:string,pageUrl:string}
+     */
+    private static function get_initial_inventory_state($atts, $locked) {
+        $url_params = [
+            'location'   => 'location',
+            'condition'  => 'condition',
+            'status'     => 'status',
+            'category'   => 'category',
+            'make'       => 'make',
+            'model'      => 'model',
+            'price'      => 'price',
+            'length'     => 'length',
+            'horsepower' => 'horsepower',
+            'boat_year'  => 'year',
+        ];
+
+        $raw_filters = [];
+        foreach ($url_params as $param => $filter_key) {
+            if (!isset($_GET[$param]) || isset($locked[$filter_key])) {
+                continue;
+            }
+            $raw_filters[$filter_key] = (array) $_GET[$param];
+        }
+
+        // Allowlist keys and sanitize slugs.
+        $filters = AJAX_Handlers::sanitize_filters($raw_filters);
+        unset($filters['id']);
+
+        $page = isset($_GET['inventory_page']) ? max(1, absint($_GET['inventory_page'])) : 1;
+
+        $query = '';
+        if ($atts['show_search'] && isset($_GET['q']) && !is_array($_GET['q'])) {
+            $query = mb_substr(sanitize_text_field(wp_unslash($_GET['q'])), 0, 100);
+        }
+
+        $sort_by = $atts['show_sort']
+            ? get_option('dealers_choice_default_sort', 'date-desc')
+            : 'date-desc';
+
+        // Listing URL for pagination hrefs and the ItemList 'url', rebuilt from the
+        // sanitized state. Multiple values use key[]=.
+        $page_url = is_singular() ? (string) get_permalink(get_queried_object_id()) : '';
+
+        if ($page_url !== '') {
+            $pairs = [];
+            foreach ($url_params as $param => $filter_key) {
+                if (empty($filters[$filter_key])) {
+                    continue;
+                }
+                $name = count($filters[$filter_key]) > 1 ? $param . '[]' : $param;
+                foreach ($filters[$filter_key] as $value) {
+                    $pairs[] = rawurlencode($name) . '=' . rawurlencode($value);
+                }
+            }
+            if ($query !== '') {
+                $pairs[] = 'q=' . rawurlencode($query);
+            }
+            if ($page > 1) {
+                $pairs[] = 'inventory_page=' . $page;
+            }
+            if (!empty($pairs)) {
+                $page_url .= (strpos($page_url, '?') === false ? '?' : '&') . implode('&', $pairs);
+            }
+        }
+
+        return [
+            'filters' => $filters,
+            'page'    => $page,
+            'sortBy'  => $sort_by,
+            'query'   => $query,
+            'pageUrl' => $page_url,
+        ];
+    }
+
+    /**
+     * Parses a 'lock' or 'tax' shortcode attribute into validated constraints.
      *
-     * The key must be present in AJAX_Handlers::get_lockable_taxonomy_map(),
-     * otherwise the pair is dropped. Output is always run through
-     * sanitize_locked_constraints(), so the return value is safe to hand
-     * straight to a tax_query.
+     * Syntax: "key:slug" pairs separated by "|", with multiple slugs for one key
+     * separated by ",", e.g. lock="promotion:featured,clearance|location:main".
+     * Keys not in AJAX_Handlers::get_lockable_taxonomy_map() are dropped and the
+     * result is passed through AJAX_Handlers::sanitize_locked_constraints().
      *
      * @param string $lock Raw attribute value.
-     * @return array<string,array<int,string>>
+     * @return array<string,array<int,string>> Term slugs keyed by lock key.
      */
     public static function parse_lock_attribute($lock) {
         if (!is_string($lock) || trim($lock) === '') {
@@ -582,23 +532,12 @@ class Shortcodes {
     }
 
     /**
-     * Translate a lock/filter key into the key templates/filters.php expects.
+     * Maps a lock/filter key to the key templates/filters.php expects.
      *
-     * These layers grew separate naming schemes: the AJAX payload uses
-     * 'status', filters.php reads 'boat_status', and the taxonomy is
-     * 'boat_status'. Anything not listed passes through unchanged.
+     * Keys not in the map are returned unchanged.
      *
-     * Only ever called for keys that exist in get_filter_taxonomy_map(), i.e.
-     * ones that actually have a sidebar widget. Scoping-only taxonomies such
-     * as dc_promotions never reach this method.
-     *
-     * Note 'horsepower' maps to 'horsepower_range' for the widget but the
-     * taxonomy is registered as 'horsepower'. That mismatch is pre-existing
-     * and means a horsepower constraint zeroes the sidebar counts. Left alone
-     * here rather than fixed silently as part of a promotions change.
-     *
-     * @param string $lock_key
-     * @return string
+     * @param string $lock_key Lock or filter key (e.g. 'status', 'category').
+     * @return string Filters template key (e.g. 'boat_status', 'boat_type').
      */
     public static function map_lock_key_to_filters_key($lock_key) {
         $map = [
@@ -614,14 +553,12 @@ class Shortcodes {
     }
 
     /**
-     * Resolve locked constraints to human-readable term names for display.
+     * Resolves locked constraints to term names for display.
      *
-     * Falls back to the raw slug only when the term can't be found, so a
-     * mistyped slug in the shortcode is visible on the page rather than
-     * silently rendering an empty notice.
+     * Uses the raw slug when no matching term exists.
      *
      * @param array $locked Validated constraints.
-     * @return array<int,string>
+     * @return array<int,string> Term names.
      */
     public static function get_lock_labels($locked) {
         $map    = AJAX_Handlers::get_lockable_taxonomy_map();
@@ -642,10 +579,14 @@ class Shortcodes {
     }
 
     /**
-     * Inventory slider/carousel shortcode
+     * Renders [dealerschoice_slider]: a Slick carousel of boats.
      *
-     * [dealerschoice_slider limit="6" category="pontoon" orderby="price"]
-     * [dealerschoice_slider promotion="featured" orderby="rand" limit="8"]
+     * Attributes: limit, category, condition, location, make, year, promotion,
+     * tax ("key:slug" syntax as in lock), orderby (date, price, year, length, rand),
+     * order, slides_to_show, autoplay, autoplay_speed.
+     *
+     * @param array|string $atts Shortcode attributes.
+     * @return string HTML output, or '' when no boats match.
      */
     public static function slider_shortcode($atts) {
         $atts = shortcode_atts([
@@ -664,7 +605,6 @@ class Shortcodes {
             'autoplay_speed' => 3000,
         ], $atts, 'dealerschoice_slider');
 
-        // Build query args
         $args = [
             'post_type' => 'boat',
             'post_status' => 'publish',
@@ -672,7 +612,6 @@ class Shortcodes {
             'order' => $atts['order'],
         ];
 
-        // Add sorting
         switch ($atts['orderby']) {
             case 'price':
                 $args['orderby'] = 'meta_value_num';
@@ -687,18 +626,12 @@ class Shortcodes {
                 $args['meta_key'] = 'boat_length_inches';
                 break;
             case 'rand':
-                // Useful for promotion sliders at multi-location dealers, so
-                // one store's boats don't always lead. Note WP_Query rand
-                // ordering is not cacheable
-                // and gets expensive on large result sets, so keep 'limit'
-                // modest and don't pair this with a big posts_per_page.
                 $args['orderby'] = 'rand';
                 break;
             default:
                 $args['orderby'] = 'date';
         }
 
-        // Add taxonomy filters
         $tax_query = ['relation' => 'AND'];
 
         if (!empty($atts['category'])) {
@@ -741,11 +674,7 @@ class Shortcodes {
             ];
         }
 
-        // Additional taxonomy constraints via the 'promotion' and 'tax'
-        // attributes, using the same "key:slug" syntax as
-        // [dealerschoice_inventory lock=""]. This is how a promotion slider is
-        // scoped:
-        // [dealerschoice_slider promotion="featured" orderby="rand" limit="8"]
+        // Constraints from the 'tax' and 'promotion' attributes.
         $taxonomy_map = AJAX_Handlers::get_lockable_taxonomy_map();
 
         $slider_constraints = self::parse_lock_attribute($atts['tax']);
@@ -773,7 +702,7 @@ class Shortcodes {
             $args['tax_query'] = $tax_query;
         }
 
-        // Exclude boats marked to not show
+        // Exclude boats hidden from the public website.
         $args['meta_query'] = [
             'relation' => 'OR',
             [
@@ -793,7 +722,6 @@ class Shortcodes {
             return '';
         }
 
-        // Enqueue assets
         wp_enqueue_style('dealerschoice-public');
         wp_enqueue_style('dealerschoice-slick');
         wp_enqueue_script('dealerschoice-slider');
@@ -801,8 +729,7 @@ class Shortcodes {
         ob_start();
         $slider_id = 'dealerschoice-boat-slider-'.uniqid();
 
-        // Slick settings passed via the data-slick attribute. autoplaySpeed
-        // is only meaningful (and only included) when autoplay is on.
+        // Slick settings for data-slick; autoplaySpeed only when autoplay is on.
         $slick_settings = [
             'slidesToShow' => absint($atts['slides_to_show']),
         ];
@@ -827,12 +754,12 @@ class Shortcodes {
     }
 
     /**
-     * Standalone filters shortcode
+     * Renders [dealerschoice_filters]: the filter sidebar on its own.
      *
-     * [dealerschoice_filters]
+     * @param array|string $atts Shortcode attributes (unused).
+     * @return string HTML output.
      */
     public static function filters_shortcode($atts) {
-        // Enqueue assets
         wp_enqueue_style('dealerschoice-public');
         wp_enqueue_script('dealerschoice-public');
 
@@ -849,7 +776,6 @@ class Shortcodes {
             'person_capacity' => false,
         ];
 
-        // Get filter data
         if (class_exists('\DC\Inventory')) {
             $locations = \DC\Inventory::getTaxonomyValuesForLocation($filters);
             $conditions = \DC\Inventory::getTaxonomyValuesForCondition($filters);
@@ -892,18 +818,16 @@ class Shortcodes {
     }
 
     /**
-     * Location List Shortcode
+     * Renders [dealerschoice_location_list]: location buttons for the header location selector.
      *
-     * [dealerschoice_location_list]
-     *
-     * Displays the list of locations as buttons for the location selector popup in the header.
+     * @return string HTML output.
      */
     public static function location_list_shortcode() {
         wp_enqueue_script('dealerschoice-location-selector');
 
         $locations = get_terms([
             'taxonomy' => 'location',
-            'hide_empty' => true, // Only show locations that actually have boats
+            'hide_empty' => true,
         ]);
 
         ob_start();
@@ -932,19 +856,16 @@ class Shortcodes {
     }
 
     /**
-     * Boat Quiz Shortcode
-     *
-     * [dealerschoice_boat_quiz]
-     *
-     * Displays the step-by-step boat finder quiz.
+     * Renders [dealerschoice_boat_quiz]: the step-by-step boat finder quiz.
      *
      * Attributes:
-     * - title        (string) Quiz heading. Default: 'Find Your Perfect Boat'
-     * - subtitle     (string) Sub-heading. Default: descriptive tagline.
-     * - submit_label (string) Label on the final submit button.
-     * - boat_count   (int)    Number of matching boats to show in the result slider. Default: 3.
+     * - title           (string) Quiz heading.
+     * - subtitle        (string) Sub-heading.
+     * - submit_label    (string) Label on the final submit button.
+     * - gravity_form_id (int)    Gravity Form shown with the results. Default 0 (none).
+     * - boat_count      (int)    Matching boats in the result slider, 1 to 12. Default 3.
      *
-     * @param array $atts Shortcode attributes.
+     * @param array|string $atts Shortcode attributes.
      * @return string HTML output.
      */
     public static function boat_quiz_shortcode( $atts ) {
@@ -969,8 +890,7 @@ class Shortcodes {
         $gravity_form_id = absint( $atts['gravity_form_id'] );
         $boat_count      = min( 12, max( 1, absint( $atts['boat_count'] ) ) );
 
-        // Pre-load Gravity Forms scripts/styles so they are available when the
-        // result HTML is injected into the page via AJAX.
+        // Enqueue Gravity Forms assets for the form injected with the AJAX results.
         if ( $gravity_form_id > 0 && function_exists( 'gravity_form_enqueue_scripts' ) ) {
             gravity_form_enqueue_scripts( $gravity_form_id, true );
         }
@@ -992,19 +912,16 @@ class Shortcodes {
     }
 
     /**
-     * Generic Finance Calculator Shortcode
+     * Renders [dealerschoice_finance_calculator]: a client-side loan payment calculator.
      *
-     * [dealerschoice_finance_calculator]
-     *
-     * Client-side loan payment calculator. Amount financed, rate, term, and
-     * down payment are all user-editable. Shows a quick loan summary plus a
-     * collapsed full amortization schedule.
+     * Amount, rate, term and down payment are editable. Shows a loan summary and a
+     * collapsible amortization schedule.
      *
      * Attributes:
-     * - title           (string) Heading above the form. Default: 'Estimate Your Payment'
-     * - default_amount  (number) Pre-filled amount financed. Default: '' (blank, required field)
+     * - title          (string) Heading above the form. Default 'Estimate Your Payment'.
+     * - default_amount (number) Pre-filled amount financed. Default empty.
      *
-     * @param array $atts Shortcode attributes.
+     * @param array|string $atts Shortcode attributes.
      * @return string HTML output.
      */
     public static function finance_calculator_shortcode( $atts ) {
@@ -1030,8 +947,7 @@ class Shortcodes {
         $disclaimer       = self::get_finance_calculator_disclaimer();
         $instance_id      = 'dc-finance-calc-' . wp_unique_id();
 
-        // Only pre-compute a down payment when we already know the amount;
-        // otherwise the JS fills it in once the visitor types an amount.
+        // Default down payment only when an amount is set; otherwise the JS computes it.
         $default_down_payment = ( $default_amount !== '' )
             ? round( $default_amount * $down_payment_pct / 100, 2 )
             : '';
@@ -1045,21 +961,13 @@ class Shortcodes {
     }
 
     /**
-     * Renders the "quick" single-line finance calculator for a boat's price
-     * on single-boat.php. NOT registered as a shortcode - not user-insertable.
+     * Renders the quick finance calculator for a boat on the single boat page.
      *
-     * Gating (all must pass):
-     * 1. Admin toggle 'dealers_choice_show_finance_calculator' is enabled.
-     * 2. The boat does not already have dealer-supplied financing data
-     *    (Boat::hasFinancingData() is false) - a dealer-stated payment is
-     *    authoritative and must not be contradicted by a generic estimate.
-     * 3. The boat's price is actually visible to the current visitor
-     *    (Boat::isPriceVisible() is true) - covers both the reveal-price
-     *    gate (manufacturer MAP/pricing policy compliance) and the
-     *    $0/empty "Contact Us for Our Price" case.
+     * Renders only when the 'dealers_choice_show_finance_calculator' option is on,
+     * the boat has no dealer-supplied financing data, and its price is visible.
      *
-     * @param \DC\Boat $boat
-     * @return string HTML output, or '' if gating fails.
+     * @param \DC\Boat $boat Boat being displayed.
+     * @return string HTML output, or '' when not shown.
      */
     public static function render_quick_finance_calculator( \DC\Boat $boat ) {
         if ( get_option( 'dealers_choice_show_finance_calculator', '0' ) !== '1' ) {
@@ -1097,56 +1005,45 @@ class Shortcodes {
     }
 
     /**
-     * Global default APR (%) from Settings.
+     * Returns the default APR (%) from Settings.
      *
-     * @return float
+     * @return float APR percentage.
      */
     public static function get_default_finance_rate() {
         return (float) get_option( 'dealers_choice_finance_default_rate', 7.99 );
     }
 
     /**
-     * Global default loan term (months) from Settings.
+     * Returns the default loan term from Settings.
      *
-     * @return int
+     * @return int Term in months.
      */
     public static function get_default_finance_term() {
         return (int) get_option( 'dealers_choice_finance_default_term', 240 );
     }
 
     /**
-     * Global default down payment, as a percentage of the amount financed,
-     * from Settings.
+     * Returns the default down payment percentage from Settings.
      *
-     * @return float
+     * @return float Percentage of the amount financed.
      */
     public static function get_default_finance_down_payment_percent() {
         return (float) get_option( 'dealers_choice_finance_default_down_payment_percent', 20 );
     }
 
     /**
-     * Disclaimer text shown below both finance calculators, editable in
-     * Settings. Falls back to get_default_finance_disclaimer() when the
-     * dealer hasn't customised it.
+     * Returns the finance calculator disclaimer from Settings, or the default text.
      *
-     * @return string May contain basic HTML (saved via wp_kses_post) - escape
-     *                on output with wp_kses_post(), not esc_html().
+     * @return string Disclaimer; may contain basic HTML.
      */
     public static function get_finance_calculator_disclaimer() {
         return get_option( 'dealers_choice_finance_calculator_disclaimer', self::get_default_finance_disclaimer() );
     }
 
     /**
-     * Default disclaimer text for the finance calculators. Called both here
-     * and from the admin settings page (as the get_option() fallback) so the
-     * default copy only lives in one place.
+     * Returns the default finance calculator disclaimer text.
      *
-     * Explicitly calls out down payment, credit, price, and promotional
-     * variability, and that tax/title/destination/other fees are excluded -
-     * the calculators have no tax-rate input, so this is the only place
-     * that caveat is communicated to the visitor.
-     *
-     * @return string
+     * @return string Translated disclaimer.
      */
     public static function get_default_finance_disclaimer() {
         return __(
@@ -1156,11 +1053,9 @@ class Shortcodes {
     }
 
     /**
-     * Common boat-loan term presets (months), shared by both calculator
-     * variants and the admin settings page's default-term dropdown - single
-     * source of truth so they never drift out of sync.
+     * Returns the loan term presets used by the calculators and the Settings dropdown.
      *
-     * @return array<int,string> value(months) => label
+     * @return array<int,string> Labels keyed by term in months.
      */
     public static function get_finance_term_options() {
         return [

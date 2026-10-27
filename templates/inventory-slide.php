@@ -1,14 +1,13 @@
 <?php
 /**
- * Template: Boat Slide 
- * 
- * Displays a single boat as a slide in the inventory slider.
- * This template can be overridden by copying it to:
- * your-theme/dealerschoice/inventory-slide.php
- * 
+ * Boat slide in the inventory slider.
+ *
+ * Override by copying to your-theme/dealerschoice/inventory-slide.php.
+ * Rendered inside The Loop; reads the boat from the global $post.
+ *
+ * @var WP_Post $post Current boat post (global).
+ *
  * @package DealersChoice
- * @subpackage Templates
- * @since 1.0.0
  */
 
 if (!defined('ABSPATH')) {
@@ -18,14 +17,12 @@ if (!defined('ABSPATH')) {
 global $post;
 $boat = new \DC\Boat($post);
 
-// Get boat details
 $condition = $boat->getCondition();
 $length = $boat->getFormattedLength();
 $type = $boat->getType();
 $location = $boat->getLocation();
 $stock_number = $boat->getStockNumber();
 
-// Get CTA button
 $quote_button = get_option('dealers_choice_get_a_quote_page_id', '');
 
 ?>
