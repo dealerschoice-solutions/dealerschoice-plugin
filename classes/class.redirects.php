@@ -1,11 +1,7 @@
 <?php
 /**
- * Redirects Handler
- * 
- * Handles 404 redirects for boats that are no longer in inventory.
- * Redirects visitors to the main inventory page with a "Not Found" message
- * and filters by the requested boat type to show similar available boats.
- * 
+ * Redirects 404s on boat URLs to the inventory page, filtered by boat type.
+ *
  * @package DealersChoice
  * @subpackage Classes
  * @since 1.0.0
@@ -17,75 +13,66 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * Redirects requests for missing boats to the inventory page.
+ */
 class Redirects {
     
     /**
-     * Initialize redirects
+     * Registers the 404 redirect handler.
      */
     public static function init() {
         add_action('template_redirect', [__CLASS__, 'handle_boat_404']);
     }
     
     /**
-     * Handle 404s for boat pages
-     * 
-     * Checks if the 404 request matches the /boat/{type}/{slug}/ pattern.
-     * If so, redirects to the inventory page with the type pre-selected.
+     * Redirects a 404 on /boat/{type}/{slug}/ to the inventory page.
+     *
+     * Sends a 301 to the inventory page with `notfound=1` and the boat type
+     * as the `category` filter.
      */
     public static function handle_boat_404() {
         if (!is_404()) {
             return;
         }
 
-        // Get the requested URI
         $request_uri = $_SERVER['REQUEST_URI'];
         
-        // Check if it looks like a boat URL
-        // Pattern: /boat/{type}/{slug}/
-        // We use a regex that matches /boat/ followed by segment, followed by slug
         if (preg_match('#^/boat/([^/]+)/([^/]+)/?#', $request_uri, $matches)) {
             $type_slug = sanitize_text_field($matches[1]);
-            // $boat_slug = $matches[2]; // We don't need the slug for the filter, just the type
             
-            // Determine the inventory page URL
-            // We search for the page with the inventory shortcode, or fallback to /inventory/
             $inventory_url = self::get_inventory_page_url($type_slug);
             
             if ($inventory_url) {
-                // Build the redirect URL
-                // We map 'type' from the URL to 'category' for the inventory filter
-                // We utilize the passed 'category' param which the JS automatically picks up
                 $redirect_url = add_query_arg([
                     'notfound' => '1',
-                    'category' => $type_slug // Map the type from the URL to the category filter
+                    'category' => $type_slug
                 ], $inventory_url);
                 
                 wp_redirect($redirect_url, 301);
                 exit;
             }
         }
-        
-        // Also handle the case where the URL structure might be /inventory/boat/{type}/{slug} depending on site setup
-        // But the user specified /boat/{type}/{slug}
     }
     
     /**
-     * Get the main inventory page URL
-     * 
-     * Tries to find the page containing [dealerschoice_inventory] shortcode.
-     * Falls back to home_url('/inventory/') if not found.
-     * 
-     * @return string
+     * Resolves the inventory page URL.
+     *
+     * Checks the `dealers_choice_inventory_page_id` option, then a page at
+     * `inventory/{type}`, then a page at `inventory`, then the first published
+     * page containing [dealerschoice_inventory] (cached for a day). Falls back
+     * to home_url('/inventory/').
+     *
+     * @param string $type_slug Optional. Boat type slug. Default ''.
+     * @return string|false Inventory page URL, or false if a resolved page has no permalink.
      */
     private static function get_inventory_page_url($type_slug = '') {
-        // First check if there's a stored option (in case we add one later)
         $page_id = get_option('dealers_choice_inventory_page_id');
         
         if ($page_id) {
             return get_permalink($page_id);
         }
         
-        // Try to find page by slug 'inventory/type_slug' if type_slug is provided
         if (!empty($type_slug)) {
             $page = get_page_by_path('inventory/' . $type_slug);
             if ($page) {
@@ -93,13 +80,11 @@ class Redirects {
             }
         }
 
-        // Try to find page by slug 'inventory'
         $page = get_page_by_path('inventory');
         if ($page) {
             return get_permalink($page);
         }
         
-        // Try to find page with the shortcode (expensive query, so we cache it)
         $cached_id = get_transient('dealerschoice_inventory_page_id');
         if ($cached_id) {
             return get_permalink($cached_id);
@@ -114,7 +99,6 @@ class Redirects {
             return get_permalink($page_id);
         }
         
-        // Fallback
         return home_url('/inventory/');
     }
 }

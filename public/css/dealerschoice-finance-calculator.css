@@ -1,13 +1,9 @@
 /**
- * DealersChoice Finance Calculator
+ * DealersChoice finance calculator styles.
  *
- * Styles for both calculator variants: the generic, user-insertable
- * [dealerschoice_finance_calculator] shortcode ("full") and the compact
- * calculator auto-rendered on single-boat.php ("quick").
- *
- * Depends on the CSS custom properties defined in dealerschoice-public.css
- * (--primary-color, --secondary-color, --dark-gray, --medium-gray,
- * --light-gray, --border-gray, --flex-gap).
+ * Covers the full [dealerschoice_finance_calculator] shortcode and the quick
+ * calculator on single boat pages. Uses the custom properties defined in
+ * dealerschoice-public.css.
  */
 
 .dc-finance-calc {
@@ -106,8 +102,7 @@
     margin: 10px 0 0;
 }
 
-/* Result panel only takes on its "card" look once populated, so nothing
-   renders before the visitor clicks Calculate. */
+/* Result panel card styles, applied once the result is populated. */
 .dc-finance-calc-result:not(:empty) {
     margin-top: var(--flex-gap);
     padding: 16px 20px;

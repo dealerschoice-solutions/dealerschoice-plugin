@@ -1,82 +1,50 @@
 <?php
 /**
- * Boat Object Class
- *
- * Object-oriented wrapper for boat post type that provides convenient methods
- * for accessing boat data, ACF fields, taxonomies, and metadata. This class
- * uses magic methods to dynamically access ACF fields with a clean API.
+ * Boat post wrapper.
  *
  * @package DealersChoice
- * @subpackage Classes
- * @since 1.0.0
- *
- * Usage:
- *   $boat = new DC\Boat($post_id);
- *   echo $boat->getMake();     // Returns boat make
- *   echo $boat->getModel();    // Returns boat model
- *   echo $boat->getSalePrice(); // Returns formatted sale price
- *
- * Magic Method Pattern:
- * - Methods starting with 'get' automatically map to ACF fields
- * - CamelCase is converted to snake_case with 'field_boat_' prefix
- * - Example: getStockNumber() → field_boat_stock_number
- *
- * Special Methods:
- * - getPostID(): Returns WordPress post ID
- * - getName(): Returns post title
- * - getGalleryImages(): Returns ACF gallery array
- * - getExcerpt($length): Returns trimmed excerpt
- * - getCondition(): Returns condition taxonomy term
- * - getLocation(): Returns location taxonomy term
- * - getType(): Returns boat_type taxonomy term
- * - getMainSpecs(): Returns array of main specifications
- * - getTechSpecs(): Returns array of technical specifications
- * - getPayment(): Returns array of payment information
- *
- * Constructor Options:
- * - Accepts WP_Post object
- * - Accepts post ID (integer)
- * - Defaults to global $post if no argument provided
- *
- * Meta Management:
- * - getMeta($key): Get post meta value
- * - setMeta($key, $value): Update post meta value
- * - getField($key): Get ACF field value
- *
- * Dependencies:
- * - ACF (get_field function)
- * - WordPress taxonomy functions
- * - WordPress post functions
  */
 namespace DC;
 
+/**
+ * Wraps a boat post with accessors for its ACF fields, taxonomy terms and schema data.
+ *
+ * Any undefined getFooBar() call maps to the ACF field key field_boat_foo_bar.
+ */
 class Boat {
     private $post;
 
-    // Constructor accepts either a post ID or WP_Post object
+    /**
+     * Sets the wrapped post.
+     *
+     * @param \WP_Post|int|null $post Optional. Post object or ID. Default is the global post.
+     */
     public function __construct($post = null) {
         if ($post instanceof WP_Post) {
             $this->post = $post;
         } elseif (is_numeric($post)) {
             $this->post = get_post($post);
         } else {
-            // Fallback to the current post if nothing is passed
             global $post;
             $this->post = $post;
         }
     }
 
-    // Magic method to dynamically handle method calls
+    /**
+     * Maps getFooBar() calls to the ACF field field_boat_foo_bar.
+     *
+     * @param string $name      Called method name.
+     * @param array  $arguments Call arguments (unused).
+     * @return mixed ACF field value.
+     * @throws \Exception When the method name does not start with 'get'.
+     */
     public function __call($name, $arguments) {
-        // Check if the method starts with 'get'
         if (strpos($name, 'get') === 0) {
-            // Convert method name to field key, remove 'get' and convert camel case to snake case
+            // Strip 'get' and convert CamelCase to snake_case.
             $field = strtolower(preg_replace('/([a-z])([A-Z])/', '$1_$2', substr($name, 3)));
 
-            // Add the 'field_boat_' prefix
             $acfFieldKey = 'field_boat_' . $field;
 
-            // Get the ACF field
             return $this->getField($acfFieldKey);
         }
 
@@ -103,9 +71,8 @@ class Boat {
         update_post_meta($this->post->ID, $key, $value);
     }
 
-    // You can add custom methods for additional functionality
     public function getField($key) {
-        return get_field($key, $this->post->ID); // Using ACF
+        return get_field($key, $this->post->ID);
     }
 
     public function getExcerpt($length = 20) {
@@ -130,17 +97,30 @@ class Boat {
         $terms = get_the_terms( $this->post->ID, 'boat_type' );
         return $terms ? $terms[0]->name : '';
     }
-    // Take decimal length and convert to feet and inches format
+    /**
+     * Returns the length in feet and inches, e.g. 21' 6".
+     *
+     * @return string
+     */
     public function getFormattedLength(){
         return $this->formatFeetInches($this->getLength());
     }
 
-    // Take decimal beam and convert to feet and inches format
+    /**
+     * Returns the beam in feet and inches, e.g. 8' 6".
+     *
+     * @return string
+     */
     public function getFormattedBeam(){
         return $this->formatFeetInches($this->getBeam());
     }
 
-    // Convert a decimal feet value (e.g. 8.5) to feet and inches (e.g. 8' 6")
+    /**
+     * Converts decimal feet (e.g. 8.5) to feet and inches (e.g. 8' 6").
+     *
+     * @param mixed $value Decimal feet.
+     * @return string Formatted value, or an empty string when not a positive number.
+     */
     private function formatFeetInches($value){
         if (!is_numeric($value) || (float) $value <= 0) {
             return '';
@@ -150,7 +130,7 @@ class Boat {
         $feet = floor($value);
         $inches = round(($value - $feet) * 12);
 
-        // Rounding up to 12 inches rolls over to the next foot
+        // 12 inches rolls over to the next foot.
         if ($inches >= 12) {
             $feet++;
             $inches = 0;
@@ -195,7 +175,6 @@ class Boat {
         if($this->getField('engine_hp')){$specs["Total Horsepower"] = $this->getField('engine_hp');}
         if($this->getField('engine_hours') && !empty($this->getField('engine_hours')) && $this->getField('engine_hours') !== '0.0'){$specs["Engine Hours"] = $this->getField('engine_hours');}
         if($this->getField('boat_person_capacity')){$specs["Person Capacity"] = $this->getField('boat_person_capacity') . ' People';}
-        //if($this->getSpec()){$specs["Spec"] = $this->getSpec();}
         return $specs;
     }
 
@@ -211,13 +190,11 @@ class Boat {
     }
 
     /**
-     * Numeric (float) monthly payment supplied by the dealer's inventory feed,
-     * or 0.0 if absent/non-numeric. The ACF field is type 'text' and may
-     * contain formatting characters, so strip everything but digits and the
-     * decimal point before casting (mirrors the sanitization already applied
-     * when this field is written in Inventory_Sync).
+     * Returns the dealer-supplied monthly payment as a number.
      *
-     * @return float
+     * Strips everything but digits and the decimal point before casting.
+     *
+     * @return float Monthly payment, or 0.0 when absent or non-numeric.
      */
     public function getMonthlyPaymentNumeric() {
         $raw = $this->getMonthlyPayment();
@@ -229,9 +206,7 @@ class Boat {
     }
 
     /**
-     * Whether the dealer feed has already supplied a real monthly payment
-     * for this boat. Used to suppress the quick finance calculator so it
-     * never contradicts a dealer-stated payment.
+     * Checks whether the dealer feed supplies a monthly payment for this boat.
      *
      * @return bool
      */
@@ -240,11 +215,10 @@ class Boat {
     }
 
     /**
-     * Whether the sale price is actually visible to the current visitor
-     * without any additional gated action (reveal-price form, etc). Mirrors
-     * the exact condition used by the price block in single-boat.php so both
-     * stay in sync. Also covers boats with a $0/empty price ("Contact Us for
-     * Our Price"), which have no valid number to calculate a payment from.
+     * Checks whether the sale price is shown without a gated action.
+     *
+     * Requires hide_sale_price off, the "always show price" option on, and a
+     * sale price greater than zero.
      *
      * @return bool
      */
@@ -268,33 +242,153 @@ class Boat {
         return $videos;
     }
 
-    public function outputBoatSchema($boat){
-        $schema = [
-            "@context" => "https://schema.org",
-            "@type" => "Product",
-            "name" => $boat->getName(),
-            "description" => wp_strip_all_tags( html_entity_decode( $boat->getDescription() ) ),
-            "image" => $boat->getGalleryImages() ? array_map(function($img){ return wp_get_attachment_url($img, 'full'); }, $boat->getGalleryImages()) : null,
-            "brand" => [
-                "@type" => "Brand",
-                "name" => $boat->getMake()
-            ],
-            "model" => $boat->getModel(),
-            "productID" => $boat->getHIN() ? "hin:".$boat->getHIN() : $boat->getStockNumber(),
-            "sku" => $boat->getHIN() ?? $boat->getStockNumber(),
-            "url" => get_permalink($boat->getPostID()),
-            "offers" => [
-                "@type" => "Offer",
-                "priceCurrency" => "USD",
-                "price" => $boat->getSaleprice() ?? $boat->getMSRP(),
-                "availability" => $boat->getStatus() === 'In Stock' ? 'https://schema.org/InStock' : ($boat->getStatus() === 'Sold' ? 'https://schema.org/SoldOut' : 'https://schema.org/PreOrder'),
-                "itemCondition" => $boat->getCondition() === 'New' ? 'https://schema.org/NewCondition' : ($boat->getCondition() === 'Used' ? 'https://schema.org/UsedCondition' : 'https://schema.org/RefurbishedCondition'),
-                "url" => get_permalink($boat->getPostID()),
-                "priceValidUntil" => date('Y-m-d', strtotime('+30 days'))
-            ]
+    /**
+     * Returns the schema.org type for a boat.
+     *
+     * Types the boat as Product and Vehicle, with additionalType set to the
+     * Wikidata "boat" entity.
+     *
+     * @return array{@type:array<int,string>,additionalType:string}
+     */
+    public static function getSchemaType() {
+        return [
+            '@type' => ['Product', 'Vehicle'],
+            'additionalType' => 'https://www.wikidata.org/wiki/Q35872',
+        ];
+    }
+
+    /**
+     * Returns the schema.org availability URL for this boat's status.
+     *
+     * @return string
+     */
+    public function getSchemaAvailability() {
+        $status = $this->getStatus();
+
+        if ($status === 'In Stock') {
+            return 'https://schema.org/InStock';
+        }
+        if ($status === 'Sold') {
+            return 'https://schema.org/SoldOut';
+        }
+        return 'https://schema.org/PreOrder';
+    }
+
+    /**
+     * Builds the schema.org Offer for this boat.
+     *
+     * Includes price only when isPriceVisible() is true. Availability is always included.
+     *
+     * @param bool $detailed Optional. Add itemCondition, url and priceValidUntil. Default false.
+     * @return array
+     */
+    public function getSchemaOffer($detailed = false) {
+        $offer = [
+            '@type' => 'Offer',
         ];
 
-        echo '<script type="application/ld+json">' . json_encode($schema) . '</script>';
+        if ($this->isPriceVisible()) {
+            $offer['priceCurrency'] = 'USD';
+            $offer['price'] = $this->getSaleprice();
+            if ($detailed) {
+                $offer['priceValidUntil'] = date('Y-m-d', strtotime('+30 days'));
+            }
+        }
+
+        $offer['availability'] = $this->getSchemaAvailability();
+
+        if ($detailed) {
+            $condition = $this->getCondition();
+            $offer['itemCondition'] = $condition === 'New' ? 'https://schema.org/NewCondition' : ($condition === 'Used' ? 'https://schema.org/UsedCondition' : 'https://schema.org/RefurbishedCondition');
+            $offer['url'] = get_permalink($this->getPostID());
+        }
+
+        return $offer;
+    }
+
+    /**
+     * Returns brand, model, vehicleModelDate and bodyType schema properties.
+     *
+     * bodyType is the Boat Type term name. Empty values are omitted.
+     *
+     * @return array
+     */
+    public function getSchemaVehicleDetails() {
+        $details = [];
+
+        $make = $this->getMake();
+        if ($make) {
+            $details['brand'] = [
+                '@type' => 'Brand',
+                'name'  => $make,
+            ];
+        }
+
+        $model = $this->getModel();
+        if ($model) {
+            $details['model'] = $model;
+        }
+
+        $year = $this->getYear();
+        if ($year) {
+            $details['vehicleModelDate'] = (string) $year;
+        }
+
+        $types = get_the_terms($this->getPostID(), 'boat_type');
+        if ($types && !is_wp_error($types)) {
+            $details['bodyType'] = html_entity_decode($types[0]->name, ENT_QUOTES, 'UTF-8');
+        }
+
+        return $details;
+    }
+
+    /**
+     * Builds the schema entity for this boat as an inventory ItemList item.
+     *
+     * Includes name, url, featured image (when set), vehicle details and offers.
+     *
+     * @return array
+     */
+    public function getItemListEntry() {
+        $post_id = $this->getPostID();
+
+        $entry = self::getSchemaType();
+        $entry['name'] = html_entity_decode(wp_strip_all_tags(get_the_title($post_id)), ENT_QUOTES, 'UTF-8');
+        $entry['url'] = get_permalink($post_id);
+
+        $image = get_the_post_thumbnail_url($post_id, 'large');
+        if ($image) {
+            $entry['image'] = $image;
+        }
+
+        $entry = array_merge($entry, $this->getSchemaVehicleDetails());
+
+        $entry['offers'] = $this->getSchemaOffer();
+
+        return $entry;
+    }
+
+    public function outputBoatSchema($boat){
+        $schema = array_merge(
+            [
+                "@context" => "https://schema.org",
+            ],
+            self::getSchemaType(),
+            [
+                "name" => $boat->getName(),
+                "description" => wp_strip_all_tags( html_entity_decode( $boat->getDescription() ) ),
+                "image" => $boat->getGalleryImages() ? array_map(function($img){ return wp_get_attachment_url($img, 'full'); }, $boat->getGalleryImages()) : null,
+            ],
+            $boat->getSchemaVehicleDetails(),
+            [
+                "productID" => $boat->getHIN() ? "hin:".$boat->getHIN() : $boat->getStockNumber(),
+                "sku" => $boat->getHIN() ?: $boat->getStockNumber(),
+                "url" => get_permalink($boat->getPostID()),
+                "offers" => $boat->getSchemaOffer(true),
+            ]
+        );
+
+        echo '<script type="application/ld+json">' . wp_json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) . '</script>';
     }
 
 }

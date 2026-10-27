@@ -1,58 +1,8 @@
 <?php
 /**
- * WP-CLI Commands Class
- * 
- * Provides command-line interface for DealersChoice plugin operations.
- * Enables automation, scripting, and manual management of inventory sync
- * processes through WP-CLI.
- * 
+ * WP-CLI commands for inventory sync, cleanup, logs, and stats (`wp dealers-choice`).
+ *
  * @package DealersChoice
- * @subpackage Classes
- * @since 1.0.0
- * 
- * Available Commands:
- * 
- * wp dealers-choice sync
- *   - Triggers full inventory synchronization
- *   - Displays execution time and timestamp
- *   - Returns exit code 0 on success, 1 on error
- * 
- * wp dealers-choice cleanup
- *   - Deletes draft boats older than 6 months
- *   - Shows progress bar during deletion
- *   - Useful for database maintenance
- * 
- * wp dealers-choice logs [--lines=<number>] [--level=<level>]
- *   - Displays recent sync logs in table format
- *   - Options:
- *     --lines: Number of log entries (default: 20)
- *     --level: Filter by level (info, warning, error)
- * 
- * wp dealers-choice stats
- *   - Shows plugin statistics dashboard
- *   - Displays boat counts, last sync, local listings
- *   - Useful for monitoring and debugging
- * 
- * Usage Examples:
- *   wp dealers-choice sync
- *   wp dealers-choice cleanup
- *   wp dealers-choice logs --lines=50 --level=error
- *   wp dealers-choice stats
- * 
- * Automation:
- * Add to crontab for automatic syncing:
- *   0 2 * * * cd /path/to/wordpress && wp dealers-choice sync
- * 
- * Requirements:
- * - WP-CLI installed and accessible
- * - WordPress site with DealersChoice plugin active
- * - Proper file permissions for WordPress user
- * - API credentials configured in plugin settings
- * 
- * Dependencies:
- * - WP-CLI framework
- * - DC\InventorySync class
- * - WordPress WP_Query
  */
 
 namespace DC;
@@ -64,8 +14,8 @@ if (!defined('ABSPATH')) {
 class WP_CLI_Commands {
     
     /**
-     * Sync inventory from the API
-     * 
+     * Syncs inventory from the IMS API.
+     *
      * ## EXAMPLES
      * 
      *     wp dealers-choice sync
@@ -75,7 +25,6 @@ class WP_CLI_Commands {
     public function sync($args, $assoc_args) {
         \WP_CLI::log('Starting inventory sync...');
         
-        // Get API credentials
         $client_id = get_option('dealers_choice_client_id');
         $api_key = get_option('dealers_choice_api_key');
         
@@ -87,12 +36,10 @@ class WP_CLI_Commands {
         try {
             $sync = new InventorySync($client_id, $api_key);
             
-            // Capture start time
             $start_time = microtime(true);
             
             $sync->sync_inventory();
             
-            // Calculate execution time
             $execution_time = round(microtime(true) - $start_time, 2);
             
             $last_sync = get_option('dealers_choice_last_sync', 0);
@@ -109,8 +56,8 @@ class WP_CLI_Commands {
     }
     
     /**
-     * Clean up old draft boat posts
-     * 
+     * Permanently deletes draft boats not modified in the last 6 months.
+     *
      * ## EXAMPLES
      * 
      *     wp dealers-choice cleanup
@@ -160,8 +107,8 @@ class WP_CLI_Commands {
     }
     
     /**
-     * Display recent sync logs
-     * 
+     * Displays recent plugin log entries.
+     *
      * ## OPTIONS
      * 
      * [--lines=<number>]
@@ -189,14 +136,12 @@ class WP_CLI_Commands {
             return;
         }
         
-        // Filter by level if specified
         if ($level_filter) {
             $recent_logs = array_filter($recent_logs, function($log) use ($level_filter) {
                 return $log['level'] === $level_filter;
             });
         }
         
-        // Get most recent logs
         $recent_logs = array_slice(array_reverse($recent_logs), 0, $lines);
         
         if (empty($recent_logs)) {
@@ -204,7 +149,6 @@ class WP_CLI_Commands {
             return;
         }
         
-        // Display logs in table format
         $rows = [];
         foreach ($recent_logs as $log) {
             $rows[] = [
@@ -218,8 +162,8 @@ class WP_CLI_Commands {
     }
     
     /**
-     * Display plugin statistics
-     * 
+     * Displays boat counts and the last sync time.
+     *
      * ## EXAMPLES
      * 
      *     wp dealers-choice stats
@@ -227,12 +171,11 @@ class WP_CLI_Commands {
      * @when after_wp_load
      */
     public function stats($args, $assoc_args) {
-        // Count boats
         $total_boats = wp_count_posts('boat');
         $published = $total_boats->publish ?? 0;
         $draft = $total_boats->draft ?? 0;
         
-        // Count local boats
+        // Published boats flagged is_local.
         $local_boats = new \WP_Query([
             'post_type' => 'boat',
             'post_status' => 'publish',
@@ -260,7 +203,6 @@ class WP_CLI_Commands {
     }
 }
 
-// Register WP-CLI commands if WP-CLI is available
 if (defined('WP_CLI') && WP_CLI) {
     \WP_CLI::add_command('dealers-choice', 'DC\WP_CLI_Commands');
 }

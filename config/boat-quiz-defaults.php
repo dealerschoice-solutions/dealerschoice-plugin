@@ -1,41 +1,19 @@
 <?php
 /**
- * Boat Quiz — Default Scoring Configuration
+ * Default Boat Quiz scoring configuration.
  *
- * This file returns the default algorithm configuration for the Boat Quiz feature.
- * Scores are applied when matching quiz answers to boat_type taxonomy terms.
- *
- * ── HOW TO OVERRIDE ──────────────────────────────────────────────────────────
- * Create a file at:
- *   {your-theme}/dealerschoice/boat-quiz-config.php
- *
- * That file should return an array with the same structure as this one.
- * Your config is deep-merged over these defaults — your values win.
- *
- * The 'scoring' key maps boat_type taxonomy SLUGS (as they exist on the site)
- * to per-question weights. The higher the number, the stronger the match.
- *
- * The 'smart_keywords' key is a fallback: if a boat_type term's slug or name
- * contains one of these keyword strings, the associated score boosts are applied
- * automatically — no explicit 'scoring' entry needed. This keeps the quiz
- * site-agnostic for terms like "pontoon-boats", "offshore-fishing", etc.
- *
- * Keywords match on WORD boundaries, and only the best keyword score is taken
- * per question — never the sum. A term named "Wake Surf" therefore scores like
- * a wake boat, not like a wake boat plus a surf boat. Keep each keyword block
- * complete (activity + crew + priorities) so keyword-matched types stay
- * competitive with types listed in the explicit matrix above.
+ * Scores match quiz answers to boat_type taxonomy terms. A theme can return an
+ * array with the same structure from {theme}/dealerschoice/boat-quiz-config.php;
+ * it is deep-merged over these defaults.
  *
  * Questions / answer keys:
  *   activity   : cruising | fishing | watersports | adventure
  *   crew       : small (1–4) | medium (5–8) | large (9+)
  *   priorities : comfort | performance | fishing | adventure
- *   budget     : pulled dynamically from price_range taxonomy (slug used as key).
- *                Price is scored from live inventory (see 'price_fit'), so you
- *                only need explicit 'budget' weights for unusual cases.
+ *   budget     : price_range term slugs. Scored from live inventory (see
+ *                'price_fit'); explicit 'budget' weights are optional.
  *
  * @package DealersChoice
- * @since 1.0.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -48,9 +26,8 @@ return [
     |--------------------------------------------------------------------------
     | Explicit Scoring Matrix
     |--------------------------------------------------------------------------
-    | Key = boat_type taxonomy slug exactly as it exists in WordPress.
-    | Each sub-key maps a question name → answer value → score (integer).
-    | Missing question/answer combos score 0 (no bonus, no penalty).
+    | Key = boat_type taxonomy slug. Each entry maps question => answer => score
+    | (integer). Missing question/answer combinations score 0.
     |--------------------------------------------------------------------------
     */
     'scoring' => [
@@ -133,10 +110,11 @@ return [
     |--------------------------------------------------------------------------
     | Smart Keyword Fallback
     |--------------------------------------------------------------------------
-    | If a boat_type term slug or name CONTAINS one of these keyword strings
-    | (case-insensitive), the scores below are automatically applied.
-    | This handles term slugs like "pontoon-boats", "offshore-fishing", etc.
-    | without requiring an explicit 'scoring' entry above.
+    | Applies to boat_type terms with no 'scoring' entry. A keyword matches a
+    | whole word in the term slug or name (case-insensitive), or a word prefix
+    | when the term has no whole-word matches. 'match' => 'exact' disables
+    | prefix matching for that keyword. Only the best keyword score per
+    | question is used.
     |
     | Format: 'keyword' => [ 'question' => [ 'answer' => score, ... ], ... ]
     |--------------------------------------------------------------------------
@@ -166,7 +144,7 @@ return [
         ],
 
         'bass' => [
-            'match'      => 'exact',   // avoid matching unrelated compounds
+            'match'      => 'exact',
             'activity'   => [ 'fishing' => 4 ],
             'crew'       => [ 'small' => 3 ],
             'priorities' => [ 'fishing' => 4 ],
@@ -179,7 +157,7 @@ return [
         ],
 
         'ski' => [
-            'match'      => 'exact',   // 'ski' would otherwise match "skiff"
+            'match'      => 'exact',
             'activity'   => [ 'watersports' => 5, 'cruising' => 1 ],
             'crew'       => [ 'small' => 2, 'medium' => 3, 'large' => 2 ],
             'priorities' => [ 'performance' => 4, 'comfort' => 1 ],
@@ -208,13 +186,13 @@ return [
         ],
 
         'center' => [
-            'match'      => 'exact',   // avoid matching unrelated compounds
+            'match'      => 'exact',
             'activity'   => [ 'fishing' => 3 ],
             'priorities' => [ 'fishing' => 3 ],
         ],
 
         'console' => [
-            'match'      => 'exact',   // avoid matching unrelated compounds
+            'match'      => 'exact',
             'activity'   => [ 'fishing' => 2 ],
             'priorities' => [ 'fishing' => 2 ],
         ],
@@ -254,20 +232,20 @@ return [
         ],
 
         'jon' => [
-            'match'      => 'exact',   // avoid matching unrelated compounds
+            'match'      => 'exact',
             'activity'   => [ 'fishing' => 3 ],
             'crew'       => [ 'small' => 4 ],
             'priorities' => [ 'fishing' => 4 ],
         ],
 
         'bay' => [
-            'match'      => 'exact',   // 'bay' would otherwise match "bayliner"
+            'match'      => 'exact',
             'activity'   => [ 'fishing' => 3 ],
             'priorities' => [ 'fishing' => 3 ],
         ],
 
         'sport' => [
-            'match'      => 'exact',   // 'sport' would otherwise match "sportsman"
+            'match'      => 'exact',
             'activity'   => [ 'watersports' => 2, 'cruising' => 2 ],
             'crew'       => [ 'small' => 2 ],
             'priorities' => [ 'performance' => 3 ],
@@ -290,23 +268,13 @@ return [
     |--------------------------------------------------------------------------
     | Non-Boat Categories
     |--------------------------------------------------------------------------
-    | Dealers commonly file accessories under the boat_type taxonomy so they
-    | appear in inventory listings — surfboards, foils, trailers, apparel. Those
-    | are legitimate inventory but they are never a valid answer to "which boat
-    | suits me", so any boat_type term matching one of these words is dropped
-    | from quiz scoring entirely (it is not shown as a match or as a runner-up).
-    |
-    | A term that also reads as a vessel is kept, so "Wakeboard Boats" survives
-    | while "Electric Wake Surfboards" does not.
-    |
-    | Set this to an empty array to consider every boat_type term, or filter
-    | per-term with the 'dc_boat_quiz_exclude_type' hook.
+    | boat_type terms matching any of these words are excluded from quiz
+    | results, unless the term also matches a 'vessel_keywords' word.
+    | An empty array includes every boat_type term. Filter per term with
+    | 'dc_boat_quiz_exclude_type'.
     |--------------------------------------------------------------------------
     */
     'excluded_keywords' => [
-        // Deliberately conservative: only words that cannot describe a boat.
-        // "Wakeboard", "Wakesurf" and "Waterski" are NOT listed, because plenty
-        // of dealers use them as the name of a tow-boat category.
         'surfboard',
         'kneeboard',
         'paddleboard',
@@ -354,12 +322,8 @@ return [
     |--------------------------------------------------------------------------
     | Price Fit
     |--------------------------------------------------------------------------
-    | The quiz asks for a budget, so the budget has to change the answer. Rather
-    | than hard-coding what each boat type "should" cost — impossible to do
-    | site-agnostically, since price_range slugs differ per dealer — we count how
-    | many visible boats of each type actually sit inside the chosen price range
-    | and score on that. A type the dealer doesn't stock at that price is not a
-    | sensible recommendation for that price, whatever its name suggests.
+    | Scores each boat type by how many visible boats of that type fall inside
+    | the chosen price range.
     |
     |   hard_filter            When true, types with inventory in the budget
     |                          always outrank types without. Set false to make
@@ -370,12 +334,10 @@ return [
     |   boats_per_depth_point  Boats in budget needed per depth point.
     |   widen_tiers            How many price tiers either side the result
     |                          slider may borrow from when the chosen range
-    |                          can't fill it. 0 disables widening. Keep this
-    |                          low — travelling the whole ladder is what let a
-    |                          "$200k+" answer come back with $18k stock.
+    |                          can't fill it. 0 disables widening.
     |
-    | If NO boat type has inventory in the chosen range, price scoring is skipped
-    | entirely so a thin inventory can't produce a nonsense result.
+    | Price scoring is skipped when no boat type has inventory in the chosen
+    | range.
     |--------------------------------------------------------------------------
     */
     'price_fit' => [
@@ -391,9 +353,8 @@ return [
     |--------------------------------------------------------------------------
     | Result Copy
     |--------------------------------------------------------------------------
-    | "why" text displayed on the result card for each boat type slug.
-    | Falls back to the term description if no entry exists here.
-    | Override in your theme config file.
+    | "Why" text shown on the result card, keyed by boat type slug. Falls back
+    | to the term description when a slug has no entry.
     |--------------------------------------------------------------------------
     */
     'result_copy' => [

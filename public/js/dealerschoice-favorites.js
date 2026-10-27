@@ -1,14 +1,16 @@
 /**
- * DealersChoice Favorites JS
- * Handles add/remove favorites using localStorage.
+ * DealersChoice favorites: stores favorite boat IDs in localStorage and records add/remove analytics.
  */
 (function($) {
     'use strict';
 
-    // Key for localStorage
     var FAVORITES_KEY = 'dealerschoice_favorites';
 
-    // Get favorites array from localStorage
+    /**
+     * Reads the favorites list from localStorage.
+     *
+     * @returns {string[]} Favorite boat IDs, or an empty array when missing or invalid.
+     */
     function getFavorites() {
         var favs = localStorage.getItem(FAVORITES_KEY);
         if (!favs) return [];
@@ -19,12 +21,21 @@
         }
     }
 
-    // Save favorites array to localStorage
+    /**
+     * Writes the favorites list to localStorage.
+     *
+     * @param {string[]} favs Favorite boat IDs.
+     */
     function setFavorites(favs) {
         localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
     }
 
-    // Add or remove a boat ID
+    /**
+     * Adds the boat to favorites, or removes it if already present.
+     *
+     * @param {string} boatId Boat post ID.
+     * @returns {boolean} True when the boat is a favorite after toggling.
+     */
     function toggleFavorite(boatId) {
         var favs = getFavorites();
         var idx = favs.indexOf(boatId);
@@ -37,12 +48,22 @@
         return favs.indexOf(boatId) !== -1;
     }
 
-    // Check if a boat is a favorite
+    /**
+     * Checks whether a boat is in the favorites list.
+     *
+     * @param {string} boatId Boat post ID.
+     * @returns {boolean} True when the boat is a favorite.
+     */
     function isFavorite(boatId) {
         return getFavorites().indexOf(boatId) !== -1;
     }
 
-    // Update button UI
+    /**
+     * Sets a favorite button's icon, active class and label for its state.
+     *
+     * @param {jQuery}  $btn  Favorite button.
+     * @param {boolean} isFav Whether the boat is a favorite.
+     */
     function updateButton($btn, isFav) {
         var $icon = $btn.find('.dc-favorite-icon');
         var $label = $btn.find('.dc-favorite-label');
@@ -60,7 +81,11 @@
     }
 
 
-    // Function to (re)initialize all favorite buttons
+    /**
+     * Syncs every favorite button in the context with stored favorites.
+     *
+     * @param {Element|string} [context] Container to search. Defaults to the document.
+     */
     function initFavoriteButtons(context) {
         var $context = context ? $(context) : $(document);
         $context.find('.dc-favorite-btn').each(function() {
@@ -70,20 +95,17 @@
         });
     }
 
-    // Initial setup on page load
     $(document).ready(function() {
-        // Init on page load
         initFavoriteButtons();
     });
 
-    // Event delegation for dynamically loaded buttons
+    // Toggle a favorite and record the analytics event.
     $(document).on('click', '.dc-favorite-btn', function(e) {
         var $btn = $(this);
         var boatId = $btn.data('boat-id').toString();
         var nowFav = toggleFavorite(boatId);
         updateButton($btn, nowFav);
 
-        // Fire-and-forget analytics event — does not affect UI if it fails
         if (typeof dealersChoicePublic !== 'undefined' && dealersChoicePublic.ajaxUrl) {
             $.ajax({
                 url: dealersChoicePublic.ajaxUrl,
@@ -98,7 +120,7 @@
         }
     });
 
-    // Expose for other scripts (e.g., for shortcode page, or after AJAX load)
+    // Public API for the favorites page and AJAX-rendered results.
     window.DealersChoiceFavorites = {
         getFavorites: getFavorites,
         setFavorites: setFavorites,

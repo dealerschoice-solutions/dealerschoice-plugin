@@ -1,16 +1,14 @@
 /**
- * This file contains the javascript functionality for revealing boat pricing on the inventory page.
+ * Reveal Price: opens the Popup Maker lead form, verifies location by ZIP, and reveals boat prices.
  */
 
 var popupBoatID = '';
 var popupBoatName = '';
 var popupStockNumber = '';
 var currentMessage = '';
-var currentStatus = ''; // Short status stored in the GF hidden field: 'verified', 'out_of_area', or 'unverified'.
+var currentStatus = ''; // Location status written to the priceStatus hidden field.
 var gfFormSnapshot = null;
-// jQuery reference to the button that opened the popup. Preferred over re-querying by
-// data-inventory-id, which can match zero elements (once the button has been replaced)
-// or several (if favorites and inventory cards for the same boat share a page).
+// Button that opened the popup.
 var $clickedPriceButton = null;
 
 jQuery(document).ready(function($) {
@@ -24,15 +22,11 @@ jQuery(document).ready(function($) {
         var $btn = $(this);
         var boatID = $btn.data('inventory-id');
 
-        // Already unlocked: skip the form entirely. The visitor filled it out once, so we
-        // do not ask again — but they still have to click to see a price, which is the
-        // point of 'individual' scope. Location is trusted from that first verification.
+        // Already unlocked: reveal without the form.
         if (dcGetCookie('dc_price_unlocked') === '1') {
             if (dcGetRevealScope() === 'individual') {
                 dcRevealUnit($btn);
             } else {
-                // 'all' scope safety net: normally dcRevealPricesIfUnlocked() has already
-                // replaced these buttons on ready, so this only fires if it did not.
                 dcRevealAllUnits();
             }
             return;
@@ -52,14 +46,11 @@ jQuery(document).ready(function($) {
             return;
         }
 
-        // If zip codes are configured, show the location request message immediately.
-        // The popup <div> is already in the DOM (just hidden), so we can pre-populate
-        // the message container before PUM.open() starts its animation.
+        // Pre-populate the popup message before it opens.
         if (allowedZips.length > 0) {
             currentMessage = settings.locationRequestMessage || 'In order to comply with manufacturer pricing policies, we need to verify your location. Please allow location access to continue.';
             $('#popmake-' + popupId).find('.dc-reveal-price-message').html(currentMessage);
         } else {
-            // No zip codes configured ⇒ clean form, no messaging.
             currentMessage = '';
             currentStatus = 'no_restriction';
             $('#popmake-' + popupId).find('.dc-reveal-price-message').html('');
@@ -74,10 +65,10 @@ jQuery(document).ready(function($) {
 
         PUM.open(popupId);
 
-        // Get pricing; only update the message if zip codes are configured.
+        // Verify location, then update the message and status when ZIP codes are configured.
         getPricing(boatID).then(function(result){
             if (allowedZips.length === 0) {
-                return; // No zip restrictions — no message or status needed.
+                return;
             }
             if(result.canShow){
                 currentMessage = settings.locationVerifiedMessage || 'Your location has been verified. Please fill out the form to reveal the price.';
@@ -86,12 +77,10 @@ jQuery(document).ready(function($) {
                 currentMessage = settings.locationFailedMessage || 'We\'re sorry, but we were unable to verify that you\'re currently in our boating territory. A salesperson will be in touch with you to discuss pricing. Please fill out the form to continue.';
                 currentStatus = 'Out of sales area';
             } else {
-                // no_geolocation or unverified (user denied / timeout / API error).
+                // no_geolocation or unverified (denied, timeout, or API error).
                 currentMessage = settings.locationDeniedMessage || 'Geolocation is not supported by your browser. Please contact us for pricing information.';
                 currentStatus = result.status === 'no_geolocation' ? 'No geolocation' : 'Unverified';
             }
-            // Update the hidden field now that we have a definitive status.
-            // gform_post_render fired before geolocation completed, so we set it here too.
             jQuery('[data-dc-field="priceStatus"]').val(currentStatus);
             
             var openPopup = $('#popmake-'+popupId);
@@ -108,8 +97,7 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // pumAfterOpen: safety net in case the popup animation starts before our pre-population runs.
-    // Only injects a message when zip codes are configured (currentMessage will be empty otherwise).
+    // Write the current message into the popup after it opens.
     $(document).on('pumAfterOpen', function(e){
         if (!currentMessage) { return; }
         var $popup = $(e.target);
@@ -120,20 +108,14 @@ jQuery(document).ready(function($) {
         }
     });
 
-    // Forget the clicked button once the popup closes, so a stray confirmation cannot
-    // write a price into a stale spot.
+    // Clear the clicked button reference when the popup closes.
     $(document).on('pumAfterClose', function(e){
         if ($(e.target).attr('id') !== 'popmake-' + popupId) { return; }
         $clickedPriceButton = null;
     });
 
     /**
-     * When we load the page, we want to check if the user has already submitted the form to show price.
-     * If they have already submitted the reveal price form, we want to show the price.
-     *
-     * Only applies to 'all' scope. In 'individual' scope nothing is ever revealed
-     * automatically — the visitor has to click each unit, though the click is instant
-     * once they are unlocked (see the click handler above).
+     * Reveals every price on the page when the visitor is unlocked and the scope is 'all'.
      */
     function dcRevealPricesIfUnlocked() {
         if (dcGetRevealScope() === 'individual') { return; }
@@ -141,19 +123,16 @@ jQuery(document).ready(function($) {
         dcRevealAllUnits();
     }
 
-    // Run on initial ready (covers single boat pages and server-rendered buttons).
     dcRevealPricesIfUnlocked();
 
-    // Re-run whenever the inventory list is refreshed via AJAX (covers inventory listing page).
+    // Re-run after the inventory list re-renders.
     $(document).on('dc:inventoryRendered', function() {
         dcRevealPricesIfUnlocked();
     });
 });
 
 /**
- * Gravity Forms Functionality
- * When the form renders inside the popup, populate the known hidden fields using the
- * data-dc-field attributes stamped by the PHP gform_field_content filter.
+ * Populates the Reveal Price form's hidden fields (identified by data-dc-field) when it renders.
  */
 jQuery(document).on('gform_post_render', function(event, form_id, current_page){
     const settings = window.revealPriceSettings || {};
@@ -172,17 +151,16 @@ jQuery(document).on('gform_post_render', function(event, form_id, current_page){
     jQuery('[data-dc-field="inventoryID"]').val(popupBoatID);
     jQuery('[data-dc-field="boatName"]').val(popupBoatName);
     jQuery('[data-dc-field="stockNumber"]').val(popupStockNumber);
-    // Only populate priceStatus when zip-based verification was performed.
     if (currentStatus) {
         jQuery('[data-dc-field="priceStatus"]').val(currentStatus);
     }
-    // priceValue is intentionally never set here. PHP (gform_pre_submission) fills it server-side.
 });
 
 /**
- * Gravity Forms Functionality
- * When the confirmation is loaded, make an AJAX call to fetch and display the price
- * on screen in place of the button. The price is also written to the entry server-side.
+ * Handles the Reveal Price form confirmation.
+ *
+ * Sets the unlock cookie and reveals the price when the location is verified or
+ * unrestricted; otherwise shows the location message in place of the button.
  */
 jQuery(document).on('gform_confirmation_loaded', function(e, form_id) {
     const settings = window.revealPriceSettings || {};
@@ -195,19 +173,12 @@ jQuery(document).on('gform_confirmation_loaded', function(e, form_id) {
     var popupIdForClose = settings.popupId || '';
 
     if (currentStatus === 'Verified in sales area' || currentStatus === 'no_restriction') {
-        // Set the cookie, then reveal BEFORE closing the popup.
-        //
-        // Invariant: the clicked button must be out of the DOM before PUM.close() runs.
-        // Otherwise the browser returns focus to it as the popup tears down and the page
-        // jumps on mobile. Both branches below satisfy this because the reveal writes
-        // "Retrieving Price..." over the button synchronously, before any AJAX.
+        // Reveal before closing the popup.
         dcSetCookie('dc_price_unlocked', '1', 30);
         if (dcGetRevealScope() === 'individual') {
-            // Only the unit they clicked. Other units stay locked, but from now on a
-            // click on any of them reveals immediately without the form.
             dcRevealUnit($clickedPriceButton);
         } else {
-            // Every unit on the page. dc:inventoryRendered runs dcRevealPricesIfUnlocked().
+            // dc:inventoryRendered runs dcRevealPricesIfUnlocked().
             jQuery(document).trigger('dc:inventoryRendered');
         }
         if (popupIdForClose && typeof PUM !== 'undefined') { PUM.close(popupIdForClose); }
@@ -217,7 +188,7 @@ jQuery(document).on('gform_confirmation_loaded', function(e, form_id) {
         if (priceContainer.length) { priceContainer.html('<p>' + displayMsg + '</p>'); }
         if (popupIdForClose && typeof PUM !== 'undefined') { setTimeout(function(){ PUM.close(popupIdForClose); }, 400); }
     } else {
-        // no_geolocation or unverified (denied / timeout / API error).
+        // no_geolocation or unverified (denied, timeout, or API error).
         var priceContainer = dcResolvePriceContainer($clickedPriceButton, boatID);
         displayMsg = settings.locationDeniedMessage || 'Geolocation is not supported by your browser. Please contact us for pricing information.';
         if (priceContainer.length) { priceContainer.html('<p>' + displayMsg + '</p>'); }
@@ -230,7 +201,6 @@ function getPricing(boatID) {
         const settings = window.revealPriceSettings || {};
         const allowedZips = settings.allowedZips || [];
 
-        // No zip code restrictions — skip geolocation entirely.
         if (allowedZips.length === 0) {
             fulfill({ canShow: true, status: 'no_restriction' });
             return;
@@ -256,7 +226,6 @@ function getPricing(boatID) {
                     });
             },
             function() {
-                // User denied location access or geolocation timed out.
                 fulfill({ canShow: false, status: 'unverified' });
             },
             { enableHighAccuracy: true, timeout: 10000 }
@@ -274,9 +243,9 @@ function canShowPricing(zip) {
 }
 
 /**
- * 'individual' = only the clicked unit is revealed; anything else (including a missing
- * value on a site that has not saved settings since this option was added) means 'all',
- * which is the long-standing behavior.
+ * Returns the reveal scope.
+ *
+ * @returns {string} 'individual' to reveal only the clicked unit, otherwise 'all'.
  */
 function dcGetRevealScope() {
     var settings = window.revealPriceSettings || {};
@@ -284,15 +253,14 @@ function dcGetRevealScope() {
 }
 
 /**
- * Resolve the price container for a unit, preferring the live clicked button.
+ * Resolves the price container for a unit.
  *
- * Falls back to a document-wide lookup when the stashed button is no longer in the
- * document, which happens if the inventory grid re-rendered while the popup was open.
- * Without that fallback we would write the price into an orphaned node: the price would
- * silently vanish and the real button would stay on screen.
+ * Uses the button's closest .boat-price (or its parent) when the button is still in
+ * the document, otherwise looks up every button for the boat ID.
  *
- * Uses .closest('.boat-price') rather than .parent() because templates are
- * theme-overridable, so a client theme may wrap the button differently.
+ * @param {jQuery|null}   $btn   Clicked price button.
+ * @param {number|string} boatID Inventory ID.
+ * @returns {jQuery} Price container(s), or an empty set.
  */
 function dcResolvePriceContainer($btn, boatID) {
     if ($btn && $btn.length && jQuery.contains(document, $btn[0])) {
@@ -300,8 +268,7 @@ function dcResolvePriceContainer($btn, boatID) {
         return $closest.length ? $closest : $btn.parent();
     }
     if (!boatID) { return jQuery(); }
-    // Not narrowed to one match on purpose: if the same boat appears twice on a page
-    // (favorites plus inventory), both instances should reveal together.
+    // Matches every instance of the boat on the page.
     var $live = jQuery('.boat-price-popup-button[data-inventory-id="' + boatID + '"]');
     if (!$live.length) { return jQuery(); }
     var $liveClosest = $live.closest('.boat-price');
@@ -309,11 +276,11 @@ function dcResolvePriceContainer($btn, boatID) {
 }
 
 /**
- * Replace one unit's button with its price.
+ * Replaces one unit's button with its price.
  *
- * The placeholder is written synchronously, before any async work, so the button is
- * detached from the DOM by the time the caller runs PUM.close(). See the note in the
- * gform_confirmation_loaded handler for why that ordering matters on mobile.
+ * Writes a "Retrieving Price..." placeholder synchronously, then the fetched price.
+ *
+ * @param {jQuery} $btn Price button.
  */
 function dcRevealUnit($btn) {
     if (!$btn || !$btn.length) { return; }
@@ -322,9 +289,7 @@ function dcRevealUnit($btn) {
     if (!$container.length) { return; }
     $container.html('Retrieving Price...');
     revealPrice(boatID).then(function(price){
-        // The container we wrote the placeholder into is the target. Only re-resolve if
-        // an AJAX grid re-render detached it while the request was in flight — passing
-        // no button forces the document-wide lookup against the freshly rendered card.
+        // Re-resolve the container if the grid re-rendered during the request.
         var $target = jQuery.contains(document, $container[0])
             ? $container
             : dcResolvePriceContainer(null, boatID);
@@ -333,7 +298,7 @@ function dcRevealUnit($btn) {
 }
 
 /**
- * Reveal every price on the page. Used by 'all' scope only.
+ * Reveals every price on the page.
  */
 function dcRevealAllUnits() {
     jQuery('button.boat-price-popup-button').each(function(){

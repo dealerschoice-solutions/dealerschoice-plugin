@@ -1,14 +1,13 @@
 <?php
 /**
- * Template: Boat Content Inventory Card
- * 
- * Displays a single boat as a block in the inventory grid.
- * This template can be overridden by copying it to:
- * your-theme/dealerschoice/inventory-block.php
- * 
+ * Boat card in the inventory grid.
+ *
+ * Override by copying to your-theme/dealerschoice/inventory-block.php.
+ * Rendered inside The Loop; reads the boat from the global $post.
+ *
+ * @var WP_Post $post Current boat post (global).
+ *
  * @package DealersChoice
- * @subpackage Templates
- * @since 1.0.0
  */
 
 if (!defined('ABSPATH')) {
@@ -18,10 +17,8 @@ if (!defined('ABSPATH')) {
 global $post;
 $boat = new \DC\Boat($post);
 
-// Get CTA button
 $quote_button = get_option('dealers_choice_get_a_quote_page_id', '');
 
-// Get boat details
 $condition = $boat->getCondition();
 $status = $boat->getStatus();
 $year = $boat->getYear();
@@ -35,12 +32,12 @@ $msrp = $boat->getMSRP();
 $location = $boat->getLocation();
 $stock_number = $boat->getStockNumber();
 
-// Price Display settings
+// Price display settings.
 $show_price = get_option('dealers_choice_always_show_price', '0') === '1';
 $popup_form_id = get_option('dealers_choice_price_popup_form_id', '');
 $price_display_override = get_field('hide_sale_price');
 
-$show_favorites = get_option('dealers_choice_show_favorites', '1') === '1';
+$show_favorites = dealerschoiceIsFavoritesEnabled();
 
 do_action('dealerschoice_before_boat_card', $post->ID);
 ?>

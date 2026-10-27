@@ -1,15 +1,8 @@
 /**
- * DealersChoice Finance Calculator
+ * DealersChoice finance calculator.
  *
- * Client-side loan payment calculator shared by two markup variants:
- * - "full"  (.dc-finance-calc[data-calc-variant="full"])  - the generic,
- *   user-insertable [dealerschoice_finance_calculator] shortcode.
- * - "quick" (.dc-finance-calc[data-calc-variant="quick"]) - the compact
- *   calculator auto-rendered on single-boat.php.
- *
- * No AJAX/server round-trip - all math happens in the browser. Calculation
- * only runs on an explicit "Calculate" button click (no live/on-input
- * recalculation), per product requirements.
+ * Client-side loan payment calculator for the "full" shortcode variant and the
+ * "quick" single-boat variant. Calculates when the Calculate button is clicked.
  */
 (function ($) {
     'use strict';
@@ -213,8 +206,7 @@
             var principalPortion = roundToCents(monthlyPayment - interestPortion);
             var paymentThisMonth = monthlyPayment;
 
-            // Final payment absorbs any accumulated rounding drift so the
-            // schedule always sums exactly and the balance ends at $0.00.
+            // The final payment absorbs rounding drift so the balance ends at $0.00.
             if (month === n) {
                 principalPortion = balance;
                 paymentThisMonth = roundToCents(principalPortion + interestPortion);

@@ -1,8 +1,7 @@
 /**
- * DealersChoice Shortcode Builder — Modal Styles
+ * DealersChoice shortcode builder modal styles.
  *
  * @package DealersChoice
- * @since 1.0.0
  */
 
 /* ─── Overlay ─────────────────────────────────────────────────────────────── */
@@ -179,7 +178,7 @@
     }
 }
 
-/* Full-width fields (text type and single-col exceptions) */
+/* Full-width fields */
 .dc-field-row.dc-field-full {
     grid-column: 1 / -1;
 }

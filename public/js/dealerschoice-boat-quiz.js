@@ -1,13 +1,10 @@
 /**
- * Boat Quiz — Step-by-step JavaScript controller
+ * Boat quiz step controller.
  *
- * Manages navigation between quiz steps, tracks answers, POSTs to the
+ * Navigates quiz steps, tracks answers, posts them to the
  * dealerschoice_quiz_results AJAX action, and renders the returned HTML.
  *
- * No external dependencies beyond jQuery (already a WordPress dependency).
- *
  * @package DealersChoice
- * @since 1.0.0
  */
 
 (function ($) {
@@ -22,8 +19,7 @@
     };
 
     // ── Session storage ───────────────────────────────────────────────────────
-    // Persists answers + rendered HTML so the browser back button returns to
-    // results rather than forcing the user to retake the quiz.
+    // Stores answers and result HTML so returning to the page restores the results.
 
     var SESSION_KEY = 'dc_boat_quiz';
 
@@ -33,7 +29,7 @@
                 answers:    answers,
                 resultHtml: resultHtml
             }) );
-        } catch (e) { /* sessionStorage unavailable or full — silently ignore */ }
+        } catch (e) { /* Ignore unavailable or full sessionStorage. */ }
     }
 
     function loadSession() {
@@ -51,10 +47,7 @@
 
     var $wrap, $form, $result, $progressFill;
 
-    // The submit button's server-rendered markup, captured before we ever
-    // swap in the loading state. The template honours the shortcode's
-    // submit_label attribute, which the localised strings know nothing about,
-    // so this is the only reliable way to put the button back.
+    // Server-rendered submit button markup, captured before the loading state replaces it.
     var submitBtnHtml = '';
 
     // ── Init ─────────────────────────────────────────────────────────────────
@@ -66,28 +59,28 @@
         $progressFill = $('#dc-quiz-progress-fill', $wrap);
 
         if ( ! $wrap.length ) {
-            return; // Quiz not on this page
+            return;
         }
 
         state.totalSteps = parseInt( $wrap.data('total-steps'), 10 ) || 0;
 
         submitBtnHtml = $wrap.find('#dc-quiz-submit-btn').html() || '';
 
-        // Delegate events on the wrapper so they survive any DOM changes
+        // Delegated events on the wrapper.
         $wrap.on('change', 'input[type="radio"]', onOptionChange);
         $wrap.on('click', '[data-action="next"]',   onNext);
         $wrap.on('click', '[data-action="back"]',   onBack);
         $wrap.on('click', '[data-action="submit"]', onSubmit);
 
-        // "Start Over" button lives inside the AJAX-injected result HTML
+        // "Start Over" button inside the AJAX-rendered result HTML.
         $wrap.on('click', '#dc-quiz-retake-btn', onRetake);
 
-        // Restore previous session so the browser back button returns to results
+        // Restore saved results from the session.
         var session = loadSession();
         if ( session && session.resultHtml ) {
             state.answers = session.answers || {};
             showResult( session.resultHtml );
-            return; // Skip updateProgress — the form is hidden
+            return;
         }
 
         updateProgress();
@@ -100,31 +93,27 @@
         var question  = $radio.closest('.dc-quiz-step').data('question');
         var value     = $radio.val();
 
-        // Mark selected state on cards
         $radio.closest('.dc-quiz-grid').find('.dc-quiz-option').removeClass('selected');
         $radio.closest('.dc-quiz-option').addClass('selected');
 
-        // Store answer
         state.answers[question] = value;
 
-        // When activity changes, re-filter the conditional priorities step and
-        // clear any priority answer that belonged to the previous activity group.
+        // Re-filter the priorities step when the activity changes.
         if ( question === 'activity' ) {
             filterConditionalPriorities( value );
         }
 
-        // Enable the Next/Submit button for this step
         $radio.closest('.dc-quiz-step').find('[data-action="next"], [data-action="submit"]').prop('disabled', false);
     }
 
     // ── Conditional priorities filter ────────────────────────────────────────
 
     /**
-     * Show only the priority option cards that belong to the given activity
-     * group, hiding all others.  If a now-hidden card was previously selected,
-     * the priorities answer is cleared and its Next button re-disabled.
+     * Shows only the priority option cards for the given activity group.
      *
-     * @param {string} activityValue  The current answer for the 'activity' question.
+     * Clears the priorities answer and disables Next when the selected card is hidden.
+     *
+     * @param {string} activityValue Current answer to the activity question.
      */
     function filterConditionalPriorities( activityValue ) {
         var $prioritiesStep = $wrap.find('.dc-quiz-step[data-question="priorities"]');
@@ -134,7 +123,7 @@
 
         var $allConditional = $prioritiesStep.find('.dc-quiz-option--conditional');
         if ( ! $allConditional.length ) {
-            return; // Static (non-conditional) priorities — nothing to filter
+            return; // Static (non-conditional) priorities.
         }
 
         var selectionInvalidated = false;
@@ -147,7 +136,7 @@
             if ( group === activityValue ) {
                 $card.show();
             } else {
-                // If this hidden card was selected, invalidate the stored answer
+                // Clear the stored answer when the selected card is hidden.
                 if ( $radio.prop('checked') ) {
                     $radio.prop('checked', false);
                     $card.removeClass('selected');
@@ -183,7 +172,6 @@
             return;
         }
 
-        // Hide current step
         getStep( state.currentStep ).removeClass('is-active');
 
         state.currentStep = targetStep;
@@ -191,21 +179,18 @@
         var $next = getStep( targetStep );
         $next.addClass('is-active');
 
-        // Restore Next/Submit enabled state if already answered
         var question = $next.data('question');
         if ( state.answers[question] ) {
             $next.find('[data-action="next"], [data-action="submit"]').prop('disabled', false);
         }
 
-        // When landing on the priorities step, filter options to the active
-        // activity group (handles arriving via Next *and* Back).
+        // Filter the priorities step to the active activity group.
         if ( question === 'priorities' ) {
             filterConditionalPriorities( state.answers.activity || '' );
         }
 
         updateProgress();
 
-        // Smooth scroll to top of quiz
         scrollToElement( $wrap, 300 );
     }
 
@@ -219,18 +204,11 @@
     var SCROLL_GAP = 40;
 
     /**
-     * Scroll an element into view, clearing any sticky/fixed site chrome.
+     * Scrolls an element into view below any sticky or fixed site header.
      *
-     * Themes vary wildly here, so rather than hardcoding an offset we work it
-     * out in priority order:
-     *
-     *   1. The element's own `scroll-margin-top`. This is the standard CSS
-     *      mechanism for exactly this problem, and a theme that sets it (e.g.
-     *      `[id] { scroll-margin-top: 200px; }`) has already told us its header
-     *      height. jQuery's animate() ignores the property, so we read it.
-     *   2. Failing that, measure whatever is actually pinned to the top of the
-     *      viewport right now — sticky headers, the WP admin bar, notice bars.
-     *   3. Failing that, a small default gap.
+     * The offset is the element's scroll-margin-top if set, otherwise the
+     * height of elements pinned to the top of the viewport, otherwise a small
+     * default gap.
      *
      * @param {jQuery} $el      Target element.
      * @param {number} duration Animation duration in ms.
@@ -250,7 +228,6 @@
         var cssMargin = 0;
 
         if ( window.getComputedStyle ) {
-            // scrollMarginTop is unsupported in a few older engines; guard it.
             var computed = window.getComputedStyle( el );
             cssMargin = parseFloat( computed.scrollMarginTop || computed.scrollMargin ) || 0;
         }
@@ -263,13 +240,12 @@
     }
 
     /**
-     * Height of anything currently pinned across the top of the viewport.
+     * Measures the height of fixed or sticky elements pinned to the top of the viewport.
      *
-     * Probes a few points along the top edge and keeps the lowest bottom edge
-     * belonging to a fixed/sticky element. Cheap, and needs no knowledge of
-     * the theme's markup.
+     * Probes points along the top edge and keeps the lowest bottom edge of a
+     * fixed or sticky element.
      *
-     * @return {number}
+     * @returns {number} Pinned height in pixels.
      */
     function measureStickyChrome() {
         if ( typeof document.elementsFromPoint !== 'function' ) {
@@ -302,8 +278,7 @@
 
                 var rect = node.getBoundingClientRect();
 
-                // Only count bars actually sitting at the top, and ignore
-                // full-screen overlays that merely happen to be fixed.
+                // Count only bars at the top, not full-screen fixed overlays.
                 if ( rect.top > probeY || rect.height > height / 2 ) {
                     return;
                 }
@@ -332,7 +307,6 @@
         var pct = Math.round( ( ( state.currentStep - 1 ) / state.totalSteps ) * 100 );
         $progressFill.css('width', pct + '%');
 
-        // ARIA
         $progressFill.closest('[role="progressbar"]').attr('aria-valuenow', pct);
     }
 
@@ -343,7 +317,6 @@
             return;
         }
 
-        // Show loading state
         var $submitBtn = $wrap.find('#dc-quiz-submit-btn');
         $submitBtn.prop('disabled', true).html(
             '<i class="fa-light fa-arrows-rotate-reverse" aria-hidden="true"></i> ' +
@@ -385,11 +358,11 @@
         $form.hide();
         $result.html(html).show();
 
-        // Init any slick sliders injected into the result HTML
+        // Initialize sliders in the result HTML.
         $result.find('.boat-slider').each(function () {
             var $slider = $(this);
             if ( $slider.hasClass('slick-initialized') ) {
-                return; // Already init'd (shouldn't happen, but be safe)
+                return;
             }
             var sliderId = $slider.attr('id');
             var slidesToShow = parseInt( ($slider.data('slick') || {}).slidesToShow, 10 ) || 3;
@@ -407,10 +380,8 @@
             });
         });
 
-        // Animate result into view
         scrollToElement( $result, 400 );
 
-        // Inject quiz context into the embedded Gravity Form (if present)
         injectQuizDataIntoGF( $result );
     }
 
@@ -421,8 +392,7 @@
     }
 
     function restoreSubmitLabel() {
-        // Prefer the markup the template actually rendered, so a custom
-        // submit_label and the template's own arrow icon both survive.
+        // Use the captured template markup when available.
         if ( submitBtnHtml ) {
             return submitBtnHtml;
         }
@@ -434,32 +404,24 @@
     // ── Retake ────────────────────────────────────────────────────────────────
 
     function onRetake() {
-        // Clear persisted session so "Start Over" resets to a fresh quiz
         clearSession();
 
-        // Destroy any slick sliders before clearing result HTML
         $result.find('.boat-slider.slick-initialized').each(function () {
             $(this).slick('unslick');
         });
 
-        // Reset state
         state.currentStep = 1;
         state.answers     = {};
 
-        // Clear selected UI
         $wrap.find('.dc-quiz-option.selected').removeClass('selected');
         $wrap.find('input[type="radio"]').prop('checked', false);
         $wrap.find('[data-action="next"], [data-action="submit"]').prop('disabled', true);
 
-        // Submit still carries the loading label from the run we just finished,
-        // since a successful submit hands off to the result screen without
-        // restoring it. Put it back or step 4 reads "Finding your match".
+        // Replace the loading label on the submit button.
         $wrap.find('#dc-quiz-submit-btn').html( restoreSubmitLabel() );
 
-        // Clear any error messages
         $wrap.find('.dc-quiz-error').remove();
 
-        // Hide result, show form at step 1
         $result.hide().html('');
         $form.show();
 
@@ -473,17 +435,12 @@
     // ── Gravity Forms quiz-data injection ────────────────────────────────────
 
     /**
-     * Inject quiz answers as hidden <input> fields into every Gravity Form
-     * found inside $container.  The PHP GravityForms::append_quiz_data_to_notification
-     * filter reads these from $_POST and appends a formatted "Boat Quiz Results"
-     * block to every outgoing notification email.
+     * Adds quiz answers as hidden dc_quiz_* inputs to every Gravity Form in the container.
      *
-     * Also supports GF dynamic population: if the dealer adds Hidden fields to
-     * their GF form with "Allow field to be populated dynamically" checked and
-     * parameter names dc_quiz_activity / dc_quiz_crew / dc_quiz_priorities /
-     * dc_quiz_budget / dc_quiz_result, GF will store those values in the entry.
+     * DC\GravityForms appends these to notification emails. Dynamically populated
+     * GF Hidden fields with matching parameter names also store them in the entry.
      *
-     * @param {jQuery} $container  The element that contains the GF <form>.
+     * @param {jQuery} $container Element containing the Gravity Form.
      */
     function injectQuizDataIntoGF( $container ) {
         var $gfForms = $container.find( 'form[id^="gform_"]' );
@@ -508,7 +465,7 @@
             $.each( quizFields, function ( name, value ) {
                 var $existing = $form.find( 'input[name="' + name + '"]' );
                 if ( $existing.length ) {
-                    $existing.val( value );      // refresh on re-render
+                    $existing.val( value );
                 } else {
                     $form.append(
                         $( '<input>' ).attr({ type: 'hidden', name: name, value: value })
@@ -518,7 +475,7 @@
         } );
     }
 
-    // ── Localisation fallback ─────────────────────────────────────────────────
+    // ── Localization fallback ─────────────────────────────────────────────────
 
     var dcBoatQuizL10n = window.dcBoatQuizL10n || {
         loading: 'Finding your match',
@@ -532,11 +489,10 @@
         init();
     });
 
-    // Re-inject quiz data when GF re-renders a form inside the result area
-    // (handles multi-page GF forms and AJAX validation re-draws).
+    // Re-inject quiz data when Gravity Forms re-renders a form in the result area.
     $( document ).on( 'gform_post_render', function ( event, formId ) {
         if ( ! $result || ! $result.length ) {
-            return; // Quiz not on this page yet
+            return;
         }
         if ( $result.find( '#gform_' + formId ).length ) {
             injectQuizDataIntoGF( $result );

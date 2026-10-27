@@ -1,40 +1,30 @@
 <?php
 /**
- * Boat Quiz Result Template
+ * Boat quiz result card.
  *
- * Renders the quiz result card: recommended boat type, matching inventory
- * boats, a CTA to the filtered inventory page, and runner-up alternatives.
- * This template is loaded server-side and returned as HTML via AJAX.
+ * Shows the recommended boat type, matching boats, a link to the filtered
+ * inventory page, runner-up types and the optional Gravity Forms lead form.
+ * Rendered server-side and returned as HTML via AJAX.
  *
- * ── THEME OVERRIDE ───────────────────────────────────────────────────────────
- * Copy this file to {your-theme}/dealerschoice/shortcodes/boat-quiz-result.php
+ * Override by copying to your-theme/dealerschoice/shortcodes/boat-quiz-result.php.
  *
- * ── AVAILABLE VARIABLES ──────────────────────────────────────────────────────
- * $top_term       (WP_Term)   The best-matching boat_type term.
- * $why_text       (string)    Explanation of why this type was recommended.
- * $inventory_url  (string)    Filtered inventory page URL.
- * $matching_boats (int[])     Post IDs of matching boats (count set by the
- *                             boat_quiz shortcode's boat_count attribute).
- * $alt_terms      (WP_Term[]) Up to 2 runner-up boat_type terms.
- * $boat_meta      (array)     [ 'budget_respected' => bool, 'widened' => bool ]
- *                             for the boats in $matching_boats.
+ * @var WP_Term   $top_term        Best-matching boat_type term.
+ * @var string    $why_text        Explanation of the recommendation.
+ * @var string    $inventory_url   Filtered inventory page URL.
+ * @var int[]     $matching_boats  Post IDs of matching boats.
+ * @var WP_Term[] $alt_terms       Runner-up boat_type terms.
+ * @var int       $gravity_form_id Gravity Forms lead form ID, or 0 for none.
+ * @var array     $answers         Quiz answers keyed by question key.
+ * @var array     $boat_meta       Flags for $matching_boats: 'budget_respected' (bool), 'widened' (bool).
  *
  * @package DealersChoice
- * @subpackage Templates
- * @since 1.0.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-/** @var \WP_Term $top_term */
-/** @var string   $why_text */
-/** @var string   $inventory_url */
-/** @var int[]    $matching_boats */
-/** @var \WP_Term[] $alt_terms */
-
-// Count total matching boats for "View All" label — use same filters as the inventory URL
+// Count boats matching the inventory URL filters for the "View All" label.
 $_budget_slug   = $answers['budget'] ?? '';
 $_count_tax     = [
     'relation' => 'AND',
@@ -65,7 +55,7 @@ $matching_count = (int) ( new \WP_Query( [
 ] ) )->found_posts;
 wp_reset_postdata();
 
-// If no boats match the selected price range, broaden the count and URL to boat type only
+// With no boats in the selected price range, count and link by boat type only.
 if ( $matching_count === 0 && $_budget_slug && $_budget_slug !== 'any' ) {
     $matching_count = (int) ( new \WP_Query( [
         'post_type'      => 'boat',
@@ -84,7 +74,6 @@ if ( $matching_count === 0 && $_budget_slug && $_budget_slug !== 'any' ) {
         'no_found_rows'  => false,
     ] ) )->found_posts;
     wp_reset_postdata();
-    // Drop the price filter from the CTA URL so it matches what the count shows
     $inventory_url = \DC\BoatQuiz::build_inventory_url( $top_term->slug, '' );
 }
 ?>
@@ -134,11 +123,7 @@ if ( $matching_count === 0 && $_budget_slug && $_budget_slug !== 'any' ) {
                     <?php esc_html_e( 'Boats You Might Like', 'dealerschoice' ); ?>
                 </p>
                 <?php
-                /*
-                 * When we couldn't fill the slider from the selected price
-                 * range, say so rather than presenting other-priced boats as
-                 * budget matches.
-                 */
+                // Note when the slider boats fall outside the selected price range.
                 if ( ! empty( $boat_meta ) && empty( $boat_meta['budget_respected'] )
                     && ! empty( $_budget_slug ) && $_budget_slug !== 'any' ) : ?>
                     <p class="dc-quiz-result-boats-note">
@@ -174,7 +159,6 @@ if ( $matching_count === 0 && $_budget_slug && $_budget_slug !== 'any' ) {
                 </p>
                 <div class="dc-quiz-alts-list">
                     <?php foreach ( $alt_terms as $alt ) :
-                        // build_inventory_url() already appends ?category={slug}
                         $alt_url = \DC\BoatQuiz::build_inventory_url( $alt->slug, '' );
                     ?>
                         <a href="<?php echo esc_url( $alt_url ); ?>" class="dc-quiz-alt-tag">
@@ -192,16 +176,7 @@ if ( $matching_count === 0 && $_budget_slug && $_budget_slug !== 'any' ) {
                     <?php esc_html_e( "Ready to Take the Next Step?", 'dealerschoice' ); ?>
                 </p>
                 <?php
-                /**
-                 * @var array $answers  Quiz answers keyed by question slug.
-                 *
-                 * Pass quiz answers as GF dynamic-population field values so
-                 * dealers can optionally add Hidden fields with matching
-                 * parameter names (dc_quiz_activity, dc_quiz_crew, etc.) and
-                 * have them stored in the GF entry / shown via {all_fields}.
-                 * The gform_notification filter in class.gravity-forms.php
-                 * handles the notification email automatically regardless.
-                 */
+                // Quiz answers as dynamic population values for fields named dc_quiz_*.
                 $gf_field_values = [
                     'dc_quiz_activity'   => $answers['activity']   ?? '',
                     'dc_quiz_crew'       => $answers['crew']        ?? '',

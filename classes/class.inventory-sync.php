@@ -1,84 +1,47 @@
 <?php
 /**
- * Inventory Sync Class
- * 
- * Core synchronization engine that handles fetching boat inventory from the
- * DealersChoice API and syncing it to WordPress as custom post types with
- * associated taxonomies and ACF fields.
- * 
+ * Inventory sync from the DealersChoice IMS API.
+ *
  * @package DealersChoice
- * @subpackage Classes
- * @since 1.0.0
- * 
- * Functionality:
- * - Fetches inventory data from DealersChoice API
- * - Creates/updates boat posts based on unique inventory ID
- * - Processes and stores ACF field data with proper formatting
- * - Assigns taxonomies including automatic range categorization
- * - Downloads and caches images to prevent duplicates
- * - Unpublishes boats no longer in API feed (except local listings)
- * - Comprehensive logging of all operations
- * 
- * API Integration:
- * - Endpoint: https://dealerschoiceims.securem2.com/api/v1/inventory/sync
- * - Method: POST
- * - Authentication: client_id + api_key
- * - Timeout: 120 seconds
- * - Response: JSON with inventory array and last_sync timestamp
- * 
- * Timestamp Logic:
- * - Compares API last_sync with stored last_sync
- * - Skips processing if inventory hasn't changed
- * - Updates stored timestamp only on successful sync
- * 
- * Image Processing:
- * - Downloads images from API URLs
- * - Checks for existing images via URL meta lookup
- * - Caches attachment IDs for 1 week
- * - Stores source URL as post meta for future reference
- * 
- * Range Taxonomy Assignment:
- * - Price Range: Based on SalePrice field
- * - Length Range: Based on Length field (in feet)
- * - Horsepower Range: Based on EngineHP field
- * - Person Capacity Range: Based on PassengerCapacity field
- * 
- * Local Listings:
- * - Posts with is_local=1 are excluded from unpublishing
- * - Allows manual inventory additions that persist through sync
- * 
- * Dependencies:
- * - WordPress HTTP API (wp_remote_post)
- * - ACF (update_field)
- * - WordPress media functions (media_handle_sideload)
- * - Helper functions: convertLengthToInches, dealers_choice_get_*_range_term
  */
 namespace DC;
 
+/**
+ * Fetches inventory from the IMS and syncs it into boat posts.
+ *
+ * Creates or updates boat posts, ACF fields, taxonomies and gallery images,
+ * and unpublishes synced boats that are no longer in the feed.
+ */
 class InventorySync {
 
+    /**
+     * IMS inventory sync endpoint.
+     *
+     * @var string
+     */
     private $inventory_url = 'https://dealerschoiceims.securem2.com/api/v1/inventory/sync';
 
     public function __construct() {
-        // Constructor can be used for setting up hooks if needed.
     }
 
     /**
      * Syncs the boat inventory from the API.
      *
-     * @param bool $debug Whether to enable debug mode.
-     * @param bool $force Whether to force sync regardless of timestamp.
+     * Skips the sync when another sync holds the lock or when the API's
+     * last_sync timestamp is not newer than the stored one.
+     *
+     * @param bool $debug Optional. Dump the API response and exit. Default false.
+     * @param bool $force Optional. Sync regardless of the last_sync timestamp. Default false.
+     * @return void
      */
     public function sync_inventory($debug = false, $force = false) {
-        // Check if a sync is already in progress
         if (get_transient('dealers_choice_inventory_sync_lock')) {
             dealers_choice_log('Sync already in progress. Aborting.', 'warning');
             return;
         }
 
         try {
-            // Set a lock to prevent concurrent syncs
-            set_transient('dealers_choice_inventory_sync_lock', true, 15 * MINUTE_IN_SECONDS); // Lock for 15 minutes
+            set_transient('dealers_choice_inventory_sync_lock', true, 15 * MINUTE_IN_SECONDS);
 
             $client_id = get_option('dealers_choice_client_id');
             $api_key = get_option('dealers_choice_api_key');
@@ -92,7 +55,7 @@ class InventorySync {
                     'client_id' => $client_id,
                     'api_key'   => $api_key,
                 ],
-                'timeout' => 120, // 2 minutes
+                'timeout' => 120,
             ]);
 
             if (is_wp_error($response)) {
@@ -148,17 +111,17 @@ class InventorySync {
                 'trace' => $e->getTraceAsString()
             ]);
         } finally {
-            // Always release the lock
             delete_transient('dealers_choice_inventory_sync_lock');
         }
     }
 
     /**
-     * Processes the boat inventory data.
+     * Creates or updates a boat post for each inventory item, then unpublishes missing boats.
      *
-     * @param array $inventory The inventory data from the API.
-     * @param int   $last_sync_from_api The global last_sync timestamp from the API response, used as
-     *                                   fallback when individual boats lack a last_updated timestamp.
+     * @param array $inventory          Inventory items (objects) from the API.
+     * @param int   $last_sync_from_api Optional. API last_sync timestamp, used when an item has no
+     *                                  last_updated value. Default 0.
+     * @return void
      */
     public function process_boat_inventory($inventory, $last_sync_from_api = 0) {
         $synced_post_ids = [];
@@ -211,15 +174,11 @@ class InventorySync {
             if ($post_id && !is_wp_error($post_id)) {
                 $synced_post_ids[] = $post_id;
 
-                // Check if images should be processed.
-                // $last_api_update uses the per-boat last_updated field when available; falls back to
-                // the global last_sync timestamp so that image processing is not permanently skipped
-                // for API feeds that do not provide per-boat update timestamps.
+                // Images are processed for new boats, boats never photo-synced, and boats whose
+                // update time (per-boat last_updated, else the API last_sync) is newer than the last photo sync.
                 $per_boat_update = isset($boat_data->last_updated) ? strtotime($boat_data->last_updated) : 0;
                 $effective_last_update = $per_boat_update > 0 ? $per_boat_update : $last_sync_from_api;
 
-                // Get the last photo sync timestamp; If it does not exist, ensure the images are processed for new boats
-                // or boats that have been imported already and have never had their images synced before.
                 $last_photo_sync = (int) get_post_meta($post_id, '_last_photo_sync_ts', true);
                 $is_new_boat = $existing_post->post_count === 0;
 
@@ -238,9 +197,7 @@ class InventorySync {
                 $update_result = $this->update_acf_fields($post_id, $boat_data, $should_process_images);
                 $this->update_taxonomies($post_id, $boat_data);
 
-                // Only stamp the photo sync timestamp if the images actually synced successfully;
-                // otherwise a failed image (e.g. download/upload error) would be marked as synced
-                // and never retried on subsequent syncs.
+                // Stamp the photo sync time only when every image synced.
                 if ($should_process_images && !empty($update_result['images_synced'])) {
                     update_post_meta($post_id, '_last_photo_sync_ts', $effective_last_update > 0 ? $effective_last_update : time());
                 }
@@ -251,20 +208,25 @@ class InventorySync {
     }
 
     /**
-     * Updates ACF fields for a given post.
+     * Writes the boat's ACF fields, gallery and featured image from an inventory item.
      *
-     * @param int   $post_id   The ID of the post to update.
-     * @param object $data The data for the boat.
-     * @param bool $process_images Whether to process images for this boat.
-     * @return array{images_synced: bool} Whether all images were successfully synced (or skipped).
+     * When images are processed, the existing manual gallery order and featured image
+     * are kept for images still in the feed, and new images are appended.
+     *
+     * @param int    $post_id        Boat post ID.
+     * @param object $data           Inventory item from the API.
+     * @param bool   $process_images Optional. Download and attach the item's images. Default false.
+     * @return array {
+     *     @type bool $images_synced True when all images synced or images were skipped.
+     * }
      */
     public function update_acf_fields($post_id, $data, $process_images = false) {
-        // Helper function to safely get value or empty string
+        // Returns the value, or an empty string when unset or empty.
         $get_value = function($value) {
             return isset($value) && $value !== null && $value !== '' ? $value : '';
         };
-        
-        // Helper function to safely get numeric value
+
+        // Strips non-numeric characters and formats to the given decimals.
         $get_numeric = function($value, $decimals = 2) {
             if (!isset($value) || $value === null || $value === '') {
                 return '';
@@ -273,38 +235,32 @@ class InventorySync {
             return $numeric !== '' ? number_format((float) $numeric, $decimals, '.', '') : '';
         };
         
-        // Helper function to process data for ACF Repeater fields
+        // Converts a JSON string, array or object into label/value rows for an ACF repeater.
         $process_repeater_field = function($value) {
             $data = [];
-            
+
             if (!isset($value) || $value === null || $value === '') {
                 return $data;
             }
-            
-            // Decode JSON if it's a string
+
+            // Strings that are not valid JSON become a single value row.
             if (is_string($value)) {
-                // Check if it looks like JSON
                 $trimmed = trim($value);
                 if (strpos($trimmed, '[') === 0 || strpos($trimmed, '{') === 0) {
                     $decoded = json_decode($value, true);
                     if (json_last_error() === JSON_ERROR_NONE) {
                         $value = $decoded;
                     } else {
-                        // Not valid JSON, treat as string?
-                        // If it's just a plain string, assume it's a value
                          return [['label' => '', 'value' => $value]];
                     }
                 } else {
-                     // Plain string
                      return [['label' => '', 'value' => $value]];
                 }
             }
-            
+
             if (is_array($value) || is_object($value)) {
-                // Convert to array if object
                 $value_arr = (array) $value;
-                
-                // Check if it's indexed array or associative
+
                 $is_assoc = array_keys($value_arr) !== range(0, count($value_arr) - 1);
                 
                 if ($is_assoc) {
@@ -319,18 +275,16 @@ class InventorySync {
                     // Indexed Array: ["Option 1", "Option 2"] OR [{"label": "A", "value": "B"}]
                     foreach ($value_arr as $item) {
                         if (is_string($item) || is_numeric($item)) {
-                            // ["Option 1", "Option 2"]
                             $data[] = [
                                 'label' => '', 
                                 'value' => $item
                             ];
                         } elseif (is_array($item) || is_object($item)) {
                             $item_arr = (array) $item;
-                            // Checking for common key names
                             $label = '';
                             $val = '';
-                            
-                            // Try to find label
+
+                            // Match common label and value key names.
                             $label_keys = ['label', 'name', 'key', 'Label', 'Name', 'Key'];
                             foreach ($label_keys as $k) {
                                 if (isset($item_arr[$k])) {
@@ -338,8 +292,7 @@ class InventorySync {
                                     break;
                                 }
                             }
-                            
-                            // Try to find value
+
                             $val_keys = ['value', 'data', 'val', 'Value', 'Data', 'Val'];
                             foreach ($val_keys as $k) {
                                 if (isset($item_arr[$k])) {
@@ -348,7 +301,7 @@ class InventorySync {
                                 }
                             }
                             
-                            // Fallback if no specific keys found and it has 2 properties
+                            // Without known keys, use the first two properties as label/value, or one as value.
                             if (empty($label) && empty($val) && count($item_arr) == 2) {
                                 $keys = array_keys($item_arr);
                                 $label = $item_arr[$keys[0]];
@@ -358,7 +311,7 @@ class InventorySync {
                                 $val = $item_arr[$keys[0]];
                             }
                             
-                            // If still empty and haven't matched, just json_encode it into value
+                            // Otherwise store the item as JSON in the value.
                             if (empty($label) && empty($val)) {
                                 $val = json_encode($item_arr);
                             }
@@ -375,7 +328,7 @@ class InventorySync {
             return $data;
         };
         
-        // Parse images - API returns JSON string or Array
+        // Images arrive as an array or a JSON string.
         $images_array = [];
         if (isset($data->Images) && !empty($data->Images)) {
             if (is_array($data->Images)) {
@@ -391,15 +344,11 @@ class InventorySync {
         $gallery_ids = [];
         $images_synced_successfully = true;
         if ($process_images) {
-            // Resolve the API's image URLs to attachment IDs (order here reflects whatever
-            // arbitrary order the source system returns, not any manual curation).
             $images_result = $this->process_images($images_array);
             $new_gallery_ids = array_map('intval', $images_result['ids']);
             $images_synced_successfully = $images_result['success'];
 
-            // Preserve manual ACF gallery reordering: keep the existing order for images that
-            // are still part of the unit, and append any newly-added images (in API order) at
-            // the end. This way a reorder only gets disturbed for the images that actually changed.
+            // Keep the existing gallery order for images still in the feed and append new ones in API order.
             $existing_gallery_ids = array_map('intval', (array) get_field('gallery', $post_id, false));
             if (!empty($existing_gallery_ids)) {
                 $preserved_order = array_values(array_intersect($existing_gallery_ids, $new_gallery_ids));
@@ -409,9 +358,7 @@ class InventorySync {
                 $gallery_ids = $new_gallery_ids;
             }
 
-            // Keep the current featured image if it's still one of this unit's photos (even if
-            // its position moved); only fall back to the first gallery image if it was replaced
-            // with a genuinely new image not previously associated with this unit.
+            // Keep the current featured image if it is still in the gallery; otherwise use the first gallery image.
             $current_thumbnail_id = (int) get_post_thumbnail_id($post_id);
             if ($current_thumbnail_id && in_array($current_thumbnail_id, $gallery_ids, true)) {
                 $first_image_id = $current_thumbnail_id;
@@ -425,12 +372,10 @@ class InventorySync {
                 set_post_thumbnail($post_id, $first_image_id);
             }
         } else {
-            // If not processing images, retain existing gallery
             $gallery_ids = get_field('gallery', $post_id, false);
         }
 
-        // Process video JSON and store in ACF fields boat_video1, boat_video2, boat_video3 and boat_video4
-        // JSON Videos returns Video1: URL, Video2: URL, etc
+        // Map Videos (keys Video1-Video4, or a list) to the four video URL fields by position.
         $video_fields = ['field_boat_video1', 'field_boat_video2', 'field_boat_video3', 'field_boat_video4'];
         $video_urls = [];
         if (isset($data->Videos) && !empty($data->Videos)) {
@@ -443,23 +388,18 @@ class InventorySync {
                     $videos_array = (array) $decoded_videos;
                 }
             }
-            
-            // Extract video URLs based on keys like Video1, Video2, etc or indexed array
-            // We map directly to indices 0, 1, 2, 3 corresponding to Video1, Video2, Video3, Video4
+
             foreach ($video_fields as $index => $field_name) {
                 $url = '';
                 $video_key = 'Video' . ($index + 1);
-                
-                // Check if key exists (e.g. Video1)
+
                 if (isset($videos_array[$video_key]) && !empty($videos_array[$video_key])) {
                     $url = $videos_array[$video_key];
                 }
-                // Fallback to numeric index if needed
                 elseif (isset($videos_array[$index]) && !empty($videos_array[$index])) {
                     $url = $videos_array[$index];
                 }
-                
-                // Store at specific index to maintain position (even if empty)
+
                 $video_urls[$index] = $url;
             }
         }
@@ -473,7 +413,7 @@ class InventorySync {
             'field_boat_banner' => isset($data->Banner) ? substr(sanitize_text_field((string) $data->Banner), 0, 255) : '',
             'field_boat_stock_number' => (string) $get_value($data->StockNumber),
             'field_boat_hin'  => (string) $get_value($data->HIN),
-            'field_boat_description' => wp_kses_post($get_value($data->Description)), // Sanitize HTML
+            'field_boat_description' => wp_kses_post($get_value($data->Description)),
             'field_boat_saleprice' => $get_numeric($data->SalePrice, 2),
             'field_boat_msrp' => $get_numeric($data->MSRP, 2),
             'field_boat_monthly_payment' => $get_numeric($data->MonthlyPayment, 2),
@@ -483,7 +423,7 @@ class InventorySync {
             'field_boat_length' => (string) $get_value($data->Length),
             'field_boat_length_inches' => convertLengthToInches($get_value($data->Length)),
             'field_boat_weight' => (string) $get_value($data->DryWeight),
-            'field_boat_beam' => $get_numeric($data->Beam ?? null, 3), // IMS stores beam as decimal feet
+            'field_boat_beam' => $get_numeric($data->Beam ?? null, 3), // Decimal feet.
             'field_engine_hours' => $get_numeric($data->EngineHours, 1),
             'field_engine_make' => (string) $get_value($data->EngineMake),
             'field_engine_hp' => $get_value($data->EngineHP),
@@ -495,10 +435,9 @@ class InventorySync {
             'field_boat_accent_color' => (string) $get_value($data->AccentColor),
             'field_boat_person_capacity' => (isset($data->PassengerCapacity) && $data->PassengerCapacity !== null) ? (int) $data->PassengerCapacity : '',
             'gallery' => $gallery_ids,
-            'is_local' => 0, // This is not a local listing
+            'is_local' => 0,
         ];
 
-        // Add video URLs to ACF fields
         foreach ($video_fields as $index => $field_name) {
             if (isset($video_urls[$index])) {
                 $acf_fields[$field_name] = $video_urls[$index];
@@ -513,13 +452,15 @@ class InventorySync {
     }
 
     /**
-     * Updates taxonomies for a given post.
+     * Sets the boat's taxonomy terms and range terms from an inventory item.
      *
-     * @param int   $post_id   The ID of the post to update.
-     * @param object $data The data for the boat.
+     * Location keeps only the text before the first comma; status "Available" becomes "In Stock".
+     *
+     * @param int    $post_id Boat post ID.
+     * @param object $data    Inventory item from the API.
+     * @return void
      */
     public function update_taxonomies($post_id, $data) {
-        // Remove everything after the first comma in location
         $location_raw = (string) $data->Location;
         $location_term = $location_raw;
         if (strpos($location_raw, ',') !== false) {
@@ -540,19 +481,18 @@ class InventorySync {
                 wp_set_object_terms($post_id, $term_name, $tax_slug, false);
             }
         }
-        
-        // Assign to range taxonomies based on actual values
+
         $this->assign_range_taxonomies($post_id, $data);
     }
-    
+
     /**
-     * Assign boat to range taxonomies (price_range, length, horsepower)
+     * Assigns price, length, horsepower and person capacity range terms from numeric values.
      *
-     * @param int   $post_id   The ID of the post to update.
-     * @param object $data The data for the boat.
+     * @param int    $post_id Boat post ID.
+     * @param object $data    Inventory item from the API.
+     * @return void
      */
     private function assign_range_taxonomies($post_id, $data) {
-        // Assign price range
         if (isset($data->SalePrice) && !empty($data->SalePrice)) {
             $price = (float) preg_replace("/[^0-9.]/", "", (string) $data->SalePrice);
             if ($price > 0) {
@@ -562,8 +502,7 @@ class InventorySync {
                 }
             }
         }
-        
-        // Assign length range
+
         if (isset($data->Length) && !empty($data->Length)) {
             $length_feet = (float) $data->Length;
             if ($length_feet > 0) {
@@ -573,8 +512,7 @@ class InventorySync {
                 }
             }
         }
-        
-        // Assign horsepower range
+
         if (isset($data->EngineHP) && !empty($data->EngineHP)) {
             $hp = (float) $data->EngineHP;
             if ($hp > 0) {
@@ -585,7 +523,6 @@ class InventorySync {
             }
         }
 
-        // Assign person capacity range
         if (isset($data->PassengerCapacity) && $data->PassengerCapacity !== null && $data->PassengerCapacity !== '') {
             $capacity = (int) $data->PassengerCapacity;
             if ($capacity > 0) {
@@ -598,18 +535,19 @@ class InventorySync {
     }
 
     /**
-     * Unpublishes old boat posts that are no longer in the API feed by setting their status to 'draft'.
-     * Optimized to use direct database query for better performance with large datasets.
+     * Sets published boats that were not in this sync to draft and deletes their favorites events.
      *
-     * @param array $synced_post_ids An array of post IDs that were synced.
+     * Boats with is_local = 1 are skipped.
+     *
+     * @param int[] $synced_post_ids Post IDs created or updated in this sync.
+     * @return void
      */
     public function unpublish_old_boats($synced_post_ids) {
         global $wpdb;
-        
-        // Build the query efficiently
+
         $placeholders = implode(',', array_fill(0, count($synced_post_ids), '%d'));
-        
-        // Get posts that should be unpublished (published boats not in sync, excluding local listings)
+
+        // Published, non-local boats not in this sync.
         $query = $wpdb->prepare(
             "SELECT p.ID 
             FROM {$wpdb->posts} p
@@ -645,7 +583,6 @@ class InventorySync {
             
             dealers_choice_log('Unpublished old boats', 'info', ['count' => $unpublished_count]);
 
-            // Remove analytics data for boats that are no longer published
             if ( ! empty($posts_to_unpublish) ) {
                 $id_placeholders = implode( ',', array_fill(0, count($posts_to_unpublish), '%d') );
                 $deleted_rows    = $wpdb->query(
@@ -660,10 +597,13 @@ class InventorySync {
     }
 
     /**
-     * Process image URLs and return array of attachment IDs for ACF gallery field.
+     * Resolves image URLs to attachment IDs, downloading images not already in the media library.
      *
-     * @param array $image_urls Array of image URLs from API.
-     * @return array Array of attachment IDs.
+     * @param array $image_urls Image URLs from the API.
+     * @return array {
+     *     @type int[] $ids     Attachment IDs in API order.
+     *     @type bool  $success False when any image failed to download or attach.
+     * }
      */
     private function process_images($image_urls) {
         if (!is_array($image_urls) || empty($image_urls)) {
@@ -678,7 +618,6 @@ class InventorySync {
                 continue;
             }
 
-            // Check if image already exists in media library
             $existing_attachment = $this->get_attachment_by_url($image_url);
 
             if ($existing_attachment) {
@@ -686,7 +625,6 @@ class InventorySync {
                 continue;
             }
 
-            // Download and attach image
             $attachment_id = $this->download_and_attach_image($image_url);
             if ($attachment_id) {
                 $attachment_ids[] = $attachment_id;
@@ -699,29 +637,28 @@ class InventorySync {
     }
 
     /**
-     * Get attachment ID by URL (optimized with caching and meta storage).
+     * Finds an existing attachment for a source image URL.
+     *
+     * Checks the transient cache, then the _source_url attachment meta, then the attachment GUID.
+     * Matches are cached for one week.
      *
      * @param string $url Image URL.
-     * @return int|false Attachment ID or false if not found.
+     * @return int|false Attachment ID, or false if not found.
      */
     private function get_attachment_by_url($url) {
-        // Check transient cache first
         $cache_key = 'dc_img_' . md5($url);
         $cached_id = get_transient($cache_key);
-        
+
         if ($cached_id !== false) {
-            // Verify the attachment still exists
             if (get_post($cached_id)) {
                 return (int) $cached_id;
             } else {
-                // Clean up invalid cache
                 delete_transient($cache_key);
             }
         }
-        
+
         global $wpdb;
-        
-        // First try to find by stored source URL in meta
+
         $attachment_id = $wpdb->get_var($wpdb->prepare(
             "SELECT post_id FROM {$wpdb->postmeta} 
             WHERE meta_key = '_source_url' 
@@ -729,8 +666,7 @@ class InventorySync {
             LIMIT 1",
             $url
         ));
-        
-        // Fallback to guid check (less reliable but catches old imports)
+
         if (!$attachment_id) {
             $attachment = $wpdb->get_col($wpdb->prepare(
                 "SELECT ID FROM {$wpdb->posts} WHERE guid=%s;", 
@@ -740,7 +676,6 @@ class InventorySync {
         }
         
         if ($attachment_id) {
-            // Cache for 1 week
             set_transient($cache_key, $attachment_id, WEEK_IN_SECONDS);
             return (int) $attachment_id;
         }
@@ -749,21 +684,22 @@ class InventorySync {
     }
 
     /**
-     * Download image from URL and attach to media library.
+     * Downloads an image and adds it to the media library.
+     *
+     * The filename comes from the URL's "name" query parameter, else the URL path.
+     * The source URL is stored in _source_url meta and the attachment ID is cached.
      *
      * @param string $url Image URL.
-     * @return int|false Attachment ID or false on failure.
+     * @return int|false Attachment ID, or false on failure.
      */
     private function download_and_attach_image($url) {
         require_once(ABSPATH . 'wp-admin/includes/media.php');
         require_once(ABSPATH . 'wp-admin/includes/file.php');
         require_once(ABSPATH . 'wp-admin/includes/image.php');
 
-        // Parse URL to get clean filename
         $parsed_url = parse_url($url);
         $path = $parsed_url['path'] ?? '';
-        
-        // Get filename from 'name' query param if it exists
+
         $filename = $this->get_filename_from_url($url);
         if (empty($filename)) {
             $filename = basename($path);
@@ -779,16 +715,15 @@ class InventorySync {
             return false;
         }
 
-        // Get the file extension
         $file_ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
-        // Ensure we have a valid extension
+        // Default to .jpg when the filename has no extension.
         if (empty($file_ext)) {
-            $file_ext = 'jpg'; // Default to jpg if no extension is found
+            $file_ext = 'jpg';
             $filename .= '.' . $file_ext;
         }
 
-        // WordPress allows .jpg but not .jpeg — normalize before sideload
+        // Normalize .jpeg to .jpg.
         if ($file_ext === 'jpeg') {
             $filename = substr($filename, 0, -4) . 'jpg';
         }
@@ -798,13 +733,12 @@ class InventorySync {
             'tmp_name' => $tmp
         ];
 
-        // Use wp_handle_sideload for better control
         $overrides = [
             'test_form' => false,
             'test_type' => true,
         ];
-        
-        // Pass the original URL's query params to the sideload request so our filter can use it
+
+        // Expose the URL's "name" query parameter in $_GET for the duration of the sideload.
         if (!empty($parsed_url['query'])) {
             parse_str($parsed_url['query'], $query_args);
             if (isset($query_args['name'])) {
@@ -813,8 +747,7 @@ class InventorySync {
         }
 
         $file = wp_handle_sideload($file_array, $overrides);
-        
-        // Clean up the temporary $_GET param
+
         if (isset($_GET['name'])) {
             unset($_GET['name']);
         }
@@ -828,7 +761,6 @@ class InventorySync {
             return false;
         }
 
-        // Prepare attachment data
         $attachment = [
             'guid'           => $file['url'],
             'post_mime_type' => $file['type'],
@@ -837,7 +769,6 @@ class InventorySync {
             'post_status'    => 'inherit'
         ];
 
-        // Insert the attachment
         $id = wp_insert_attachment($attachment, $file['file']);
         
         if (is_wp_error($id)) {
@@ -849,14 +780,11 @@ class InventorySync {
             return false;
         }
 
-        // Generate attachment metadata
         $attach_data = wp_generate_attachment_metadata($id, $file['file']);
         wp_update_attachment_metadata($id, $attach_data);
 
-        // Store the original URL as meta for future lookups
         update_post_meta($id, '_source_url', $url);
-        
-        // Cache the attachment ID
+
         $cache_key = 'dc_img_' . md5($url);
         set_transient($cache_key, $id, WEEK_IN_SECONDS);
         
@@ -864,10 +792,10 @@ class InventorySync {
     }
     
     /**
-     * Get filename from URL.
+     * Returns the sanitized "name" query parameter from a URL.
      *
-     * @param string $url The URL to parse.
-     * @return string The filename or empty string.
+     * @param string $url URL to parse.
+     * @return string Filename, or an empty string when absent.
      */
     private function get_filename_from_url($url) {
         $parts = wp_parse_url($url);
@@ -879,10 +807,10 @@ class InventorySync {
     }
     
     /**
-     * Get MIME type for common image extensions.
+     * Returns the MIME type for a common image extension.
      *
      * @param string $ext File extension.
-     * @return string MIME type.
+     * @return string MIME type. Default 'image/jpeg'.
      */
     private function get_mime_type($ext) {
         $mime_types = [

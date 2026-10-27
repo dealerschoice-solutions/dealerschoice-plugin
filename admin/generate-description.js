@@ -1,7 +1,6 @@
 jQuery(document).ready(function($) {
-    // Handle the button click; send AJAX request to generate description
+    // Requests a generated description and inserts it into the main content editor.
     $('#dc-generate-description-button').on('click', function() {
-        // Show loading state
         var $button = $(this);
         $button.prop('disabled', true);
         
@@ -13,14 +12,12 @@ jQuery(document).ready(function($) {
 
         $.post(dc_generate_description.ajaxURL, data, function(response) {
             if (response.success) {
-                // Get the specific editor instance by its ID ('content')
                 var editor = tinymce.get('content');
 
-                // Check if the editor instance exists and is in Visual mode
+                // Visual tab uses TinyMCE; Text tab uses the textarea.
                 if (editor && !editor.isHidden()) {
                     editor.setContent(response.data);
                 } else {
-                    // Fallback for the Text tab
                     $('#content').val(response.data);
                 }
             } else {
@@ -29,7 +26,6 @@ jQuery(document).ready(function($) {
         }).fail(function(xhr, status, error) {
             alert('AJAX error: ' + error);
         }).always(function() {
-            // Reset button state 
             $button.prop('disabled', false);
         });
     });

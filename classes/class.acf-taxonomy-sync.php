@@ -1,21 +1,6 @@
 <?php
 /**
- * ACF Taxonomy Sync Class
- *
- * Listens for `boat` post saves in the admin and ensures the seven ACF
- * fields that have a corresponding taxonomy are kept in sync automatically.
- * This prevents data-integrity issues where an editor updates an ACF text
- * field (e.g. Make) without updating the matching taxonomy term.
- *
- * Fields synced:
- *   - boat_make        → make           (direct term, auto-created if new)
- *   - boat_model       → model          (direct term, auto-created if new)
- *   - boat_status      → boat_status    (direct term, auto-created if new)
- *   - boat_year        → boat_year      (direct term, auto-created if new)
- *   - boat_saleprice   → price_range    (resolved to pre-defined range term)
- *   - boat_length      → length_range   (resolved to pre-defined range term)
- *   - engine_hp        → horsepower     (resolved to pre-defined range term)
- *   - boat_person_capacity → person_capacity (resolved to pre-defined range term)
+ * Copies ACF field values on saved boats into their matching taxonomies.
  *
  * @package DealersChoice
  * @subpackage Classes
@@ -24,26 +9,34 @@
 
 namespace DC;
 
+/**
+ * Syncs ACF field values to taxonomy terms when a boat is saved.
+ *
+ * Make, model, status and year are assigned as terms by value (created if
+ * missing). Sale price, length, horsepower and person capacity are resolved
+ * to their range terms.
+ */
 class ACF_Taxonomy_Sync {
 
+    /**
+     * Hooks the sync into acf/save_post after ACF saves its field values.
+     */
     public function __construct() {
-        // Priority 20 — fires after ACF has committed its own field data (priority 10),
-        // so get_post_meta() returns the freshly-saved values.
         add_action( 'acf/save_post', [ $this, 'sync_taxonomies_on_save' ], 20 );
     }
 
     /**
-     * Sync ACF field values to their corresponding taxonomies after post save.
+     * Syncs ACF field values to taxonomies for a saved boat.
      *
-     * @param int $post_id The ID of the post being saved.
+     * Skips autosaves, revisions and non-boat posts.
+     *
+     * @param int|string $post_id ID of the post being saved.
      */
     public function sync_taxonomies_on_save( $post_id ) {
-        // Skip autosaves and revisions.
         if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) ) {
             return;
         }
 
-        // Only run for the boat post type.
         if ( get_post_type( $post_id ) !== 'boat' ) {
             return;
         }
@@ -53,10 +46,11 @@ class ACF_Taxonomy_Sync {
     }
 
     /**
-     * Sync ACF fields that map directly to a taxonomy term by value.
-     * WP will auto-create any term that does not yet exist.
+     * Assigns make, model, status and year terms from their ACF values.
      *
-     * @param int $post_id
+     * Creates missing terms. Clears the taxonomy when the field is empty.
+     *
+     * @param int|string $post_id Boat post ID.
      */
     private function sync_direct_taxonomies( $post_id ) {
         $map = [
@@ -72,21 +66,19 @@ class ACF_Taxonomy_Sync {
             if ( $value !== '' ) {
                 wp_set_object_terms( $post_id, $value, $taxonomy, false );
             } else {
-                // Field was cleared — remove any existing taxonomy association.
                 wp_set_object_terms( $post_id, [], $taxonomy, false );
             }
         }
     }
 
     /**
-     * Sync ACF fields that map to a pre-defined range taxonomy term.
-     * The actual numeric value is resolved to the correct range term name
-     * using the existing global helper functions.
+     * Assigns price, length, horsepower and capacity range terms from ACF values.
      *
-     * @param int $post_id
+     * Clears the taxonomy when the value is zero or empty.
+     *
+     * @param int|string $post_id Boat post ID.
      */
     private function sync_range_taxonomies( $post_id ) {
-        // Sale Price → price_range
         $price_raw = get_post_meta( $post_id, 'boat_saleprice', true );
         $price     = (float) preg_replace( '/[^0-9.]/', '', (string) $price_raw );
 
@@ -99,7 +91,6 @@ class ACF_Taxonomy_Sync {
             wp_set_object_terms( $post_id, [], 'price_range', false );
         }
 
-        // Length (feet) → length_range
         $length_feet = (float) get_post_meta( $post_id, 'boat_length', true );
 
         if ( $length_feet > 0 ) {
@@ -111,7 +102,6 @@ class ACF_Taxonomy_Sync {
             wp_set_object_terms( $post_id, [], 'length_range', false );
         }
 
-        // Engine Horsepower → horsepower
         $hp = (float) get_post_meta( $post_id, 'engine_hp', true );
 
         if ( $hp > 0 ) {
@@ -123,7 +113,6 @@ class ACF_Taxonomy_Sync {
             wp_set_object_terms( $post_id, [], 'horsepower', false );
         }
 
-        // Person Capacity → person_capacity
         $capacity = (int) get_post_meta( $post_id, 'boat_person_capacity', true );
 
         if ( $capacity > 0 ) {

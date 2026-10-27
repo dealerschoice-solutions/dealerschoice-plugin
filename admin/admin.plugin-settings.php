@@ -1,81 +1,39 @@
 <?php
 /**
- * Admin Plugin Settings Page
- * 
- * Handles the main settings form for DealersChoice plugin, including API credential
- * configuration and validation. This is the primary configuration interface for
- * connecting the plugin to the DealersChoice API.
- * 
+ * DealersChoice Settings admin page: API credentials, display, pricing, finance calculator and CTA options.
+ *
  * @package DealersChoice
- * @subpackage Admin
- * @since 1.0.0
- * 
- * Features:
- * - API credential configuration (Client ID and API Key)
- * - Real-time credential validation against DealersChoice API
- * - Success/error messaging with detailed feedback
- * - Secure credential storage in WordPress options
- * 
- * Settings Stored:
- * - dealers_choice_client_id: Client identifier for API authentication
- * - dealers_choice_api_key: Secret key for API authentication
- * - dealers_choice_get_a_quote_page_id: Page ID for Get a Quote form
- * - dealers_choice_schedule_test_drive_page_id: Page ID for Schedule a Test Drive form
- * - dealers_choice_financing_page_id: Page ID for Financing form
- * - dealers_choice_value_your_trade_page_id: Page ID for Value Your Trade form
- * - dealers_choice_always_show_price: Toggle to always show price
- * - dealers_choice_reveal_price_scope: Whether revealing a price unlocks all prices on the page ('all') or only the clicked unit ('individual')
- * - dealers_choice_show_favorites: Toggle to show favorites
- * - dealerschoice_show_other_locations: Toggle the "Shop Other Locations" block on location-locked inventory pages
- * - dealerschoice_other_locations_heading: Heading for the "Shop Other Locations" block (required; blank = default)
- * - dealerschoice_other_locations_intro: Optional intro text for the "Shop Other Locations" block, basic HTML allowed (saved blank = no intro; never saved = default)
- * - dealerschoice_other_locations_show_button: Toggle the "View All" button in the "Shop Other Locations" block (default on)
- * - dealerschoice_other_locations_button_text: Text for that button (blank = default)
- * - dealers_choice_show_finance_calculator: Toggle to show the quick finance calculator on single boat pages
- * - dealers_choice_finance_default_rate: Default APR (%) pre-filled in both finance calculators
- * - dealers_choice_finance_default_term: Default loan term (months) pre-filled in both finance calculators
- * - dealers_choice_finance_default_down_payment_percent: Default down payment (% of price) pre-filled in both finance calculators
- * - dealers_choice_finance_calculator_disclaimer: Disclaimer text shown below both finance calculators
- * - dealers_choice_popup_form_id: Popup form ID for price inquiries
- * - dealerschoice_sales_cta_popup_id: Popup Maker popup ID for the inventory view tracker special offer
- * - dealerschoice_inventory_view_limit: Number of views before the special offer popup is triggered
- * 
- * Validation Endpoint:
- * - URL: https://dealerschoiceims.securem2.com/api/v1/validate
- * - Method: POST
- * - Required: client_id, api_key
- * - Response: JSON with status and message
  */
 
 /**
- * Process form submission early in WordPress request cycle
+ * Saves the settings form on admin_init.
+ *
+ * Saves all display options, then validates the API credentials against the IMS
+ * and stores them only when validation succeeds. Redirects back with a status message.
+ *
+ * @return void
  */
 function dealers_choice_process_settings_form() {
-    // Only process on our settings page
     if (!isset($_GET['page']) || $_GET['page'] !== 'dealers-choice-settings') {
         return;
     }
     
-    // Check if the form is submitted
     if (!isset($_POST['submit'])) {
         return;
     }
     
-    // Check permissions
     if (!current_user_can('manage_options')) {
         wp_die(__('You do not have sufficient permissions to access this page.'));
     }
     
-    // Verify nonce for security
     if (!isset($_POST['_wpnonce']) || !wp_verify_nonce($_POST['_wpnonce'], 'dealers_choice_settings')) {
         wp_die(__('Security check failed', 'dealers-choice'));
     }
 
-    // Update the API key option
     $api_key = sanitize_text_field($_POST['dealers_choice_api_key']);
     $client_id = sanitize_text_field($_POST['dealers_choice_client_id']);
 
-    // Inventory Settings: Save selected page IDs (not required)
+    // CTA page IDs.
     $cta_fields = array(
         'get_a_quote' => 'dealers_choice_get_a_quote_page_id',
         'schedule_test_drive' => 'dealers_choice_schedule_test_drive_page_id',
@@ -91,11 +49,10 @@ function dealers_choice_process_settings_form() {
         }
     }
 
-    // Display Settings: Save 'Always Show Price' and Popup Form ID
+    // Pricing and Reveal Price.
     $always_show_price = isset($_POST['dealers_choice_always_show_price']) ? '1' : '0';
     update_option('dealers_choice_always_show_price', $always_show_price);
 
-    // Display Settings: Save whether a reveal unlocks every price or only the clicked unit
     $reveal_price_scope = isset($_POST['dealers_choice_reveal_price_scope']) ? sanitize_text_field($_POST['dealers_choice_reveal_price_scope']) : 'all';
     if (!in_array($reveal_price_scope, array('all', 'individual'), true)) {
         $reveal_price_scope = 'all';
@@ -158,17 +115,14 @@ function dealers_choice_process_settings_form() {
         delete_option('dealers_choice_price_unavailable_message');
     }
 
-    // Display Settings: Save 'Show Favorites' option
-    $show_favorites = isset($_POST['dealers_choice_show_favorites']) ? '1' : '0';
-    update_option('dealers_choice_show_favorites', $show_favorites);
+    // Favorites.
+    $show_favorites = isset($_POST['dealerschoice_show_favorites']) ? '1' : '0';
+    update_option('dealerschoice_show_favorites', $show_favorites);
 
-    // Multi-Location Inventory: Save 'Shop Other Locations' toggle
+    // Multi-Location Inventory. A blank heading or button text reverts to the default; a blank intro is stored as ''.
     $show_other_locations = isset($_POST['dealerschoice_show_other_locations']) ? '1' : '0';
     update_option('dealerschoice_show_other_locations', $show_other_locations);
 
-    // Multi-Location Inventory: Save heading and intro text. The heading is
-    // required, so blank falls back to the default; a blank intro is stored
-    // as '' and means "no intro".
     $other_locations_heading = isset($_POST['dealerschoice_other_locations_heading']) ? sanitize_text_field(wp_unslash($_POST['dealerschoice_other_locations_heading'])) : '';
     if ($other_locations_heading !== '') {
         update_option('dealerschoice_other_locations_heading', $other_locations_heading);
@@ -179,8 +133,6 @@ function dealers_choice_process_settings_form() {
     $other_locations_intro = isset($_POST['dealerschoice_other_locations_intro']) ? trim(wp_kses_post(wp_unslash($_POST['dealerschoice_other_locations_intro']))) : '';
     update_option('dealerschoice_other_locations_intro', $other_locations_intro);
 
-    // Multi-Location Inventory: Save view-all button toggle and text. Blank
-    // text falls back to the default so the link always has a visible name.
     $other_locations_show_button = isset($_POST['dealerschoice_other_locations_show_button']) ? '1' : '0';
     update_option('dealerschoice_other_locations_show_button', $other_locations_show_button);
 
@@ -191,18 +143,18 @@ function dealers_choice_process_settings_form() {
         delete_option('dealerschoice_other_locations_button_text');
     }
 
-    // Finance Calculator: Save toggle for quick calculator on single boat pages
+    // Finance Calculator.
     $show_finance_calculator = isset($_POST['dealers_choice_show_finance_calculator']) ? '1' : '0';
     update_option('dealers_choice_show_finance_calculator', $show_finance_calculator);
 
-    // Finance Calculator: Save default APR (%), clamped 0-30
+    // APR outside 0-30 reverts to 7.99.
     $finance_default_rate = isset($_POST['dealers_choice_finance_default_rate']) ? (float) $_POST['dealers_choice_finance_default_rate'] : 7.99;
     if ($finance_default_rate < 0 || $finance_default_rate > 30) {
         $finance_default_rate = 7.99;
     }
     update_option('dealers_choice_finance_default_rate', $finance_default_rate);
 
-    // Finance Calculator: Save default loan term (months) - must be one of the valid term presets
+    // Term must be one of the term presets, else 240.
     $valid_terms = array_keys(\DC\Shortcodes::get_finance_term_options());
     $finance_default_term = isset($_POST['dealers_choice_finance_default_term']) ? intval($_POST['dealers_choice_finance_default_term']) : 240;
     if (!in_array($finance_default_term, $valid_terms, true)) {
@@ -210,14 +162,13 @@ function dealers_choice_process_settings_form() {
     }
     update_option('dealers_choice_finance_default_term', $finance_default_term);
 
-    // Finance Calculator: Save default down payment (% of price), clamped 0-99
+    // Down payment percent outside 0-99 reverts to 20.
     $finance_default_down_payment_percent = isset($_POST['dealers_choice_finance_default_down_payment_percent']) ? (float) $_POST['dealers_choice_finance_default_down_payment_percent'] : 20;
     if ($finance_default_down_payment_percent < 0 || $finance_default_down_payment_percent > 99) {
         $finance_default_down_payment_percent = 20;
     }
     update_option('dealers_choice_finance_default_down_payment_percent', $finance_default_down_payment_percent);
 
-    // Finance Calculator: Save disclaimer text shown below both calculators
     $finance_calculator_disclaimer = isset($_POST['dealers_choice_finance_calculator_disclaimer']) ? wp_kses_post($_POST['dealers_choice_finance_calculator_disclaimer']) : '';
     if ($finance_calculator_disclaimer !== '') {
         update_option('dealers_choice_finance_calculator_disclaimer', $finance_calculator_disclaimer);
@@ -225,7 +176,7 @@ function dealers_choice_process_settings_form() {
         delete_option('dealers_choice_finance_calculator_disclaimer');
     }
 
-    // Inventory View Tracker: Save Popup Maker popup ID and view limit
+    // Inventory view tracker popup ID and view limit.
     $sales_cta_popup_id = isset($_POST['dealerschoice_sales_cta_popup_id']) ? sanitize_text_field($_POST['dealerschoice_sales_cta_popup_id']) : '';
     if ($sales_cta_popup_id !== '') {
         update_option('dealerschoice_sales_cta_popup_id', $sales_cta_popup_id);
@@ -239,7 +190,7 @@ function dealers_choice_process_settings_form() {
     }
     update_option('dealerschoice_inventory_view_limit', $inventory_view_limit);
 
-    // Display Settings: Save default sort order
+    // Default sort, allowlisted.
     $allowed_sorts = ['date-desc', 'date-asc', 'price-asc', 'price-desc', 'year-desc', 'year-asc', 'length-desc', 'length-asc', 'title-asc', 'title-desc'];
     $default_sort = isset($_POST['dealers_choice_default_sort']) ? sanitize_text_field($_POST['dealers_choice_default_sort']) : 'date-desc';
     if (!in_array($default_sort, $allowed_sorts, true)) {
@@ -247,7 +198,7 @@ function dealers_choice_process_settings_form() {
     }
     update_option('dealers_choice_default_sort', $default_sort);
 
-    // Validate the API key and client ID
+    // Validate the credentials against the IMS; save them only on success.
     $validation_url = 'https://dealerschoiceims.securem2.com/api/v1/validate';
     $validation_response = wp_remote_post($validation_url, array(
         'body' => array(
@@ -283,15 +234,15 @@ function dealers_choice_process_settings_form() {
 add_action('admin_init', 'dealers_choice_process_settings_form');
 
 /**
- * Display admin notices for settings page
+ * Outputs the save result notice on the settings page.
+ *
+ * @return void
  */
 function dealers_choice_settings_admin_notices() {
-    // Only show on our settings page
     if (!isset($_GET['page']) || $_GET['page'] !== 'dealers-choice-settings') {
         return;
     }
     
-    // Check if the settings were updated
     if (isset($_GET['settings-updated'])) {
         if ($_GET['settings-updated'] == 'true') {
             $message = isset($_GET['message']) ? urldecode($_GET['message']) : __('Settings saved.', 'dealers-choice');
@@ -305,10 +256,12 @@ function dealers_choice_settings_admin_notices() {
 add_action('admin_notices', 'dealers_choice_settings_admin_notices');
 
 /**
- * Enqueue admin styles and scripts for settings page
+ * Enqueues the admin stylesheet and script on DealersChoice admin pages.
+ *
+ * @param string $hook Current admin page hook suffix.
+ * @return void
  */
 function dealers_choice_settings_enqueue_assets($hook) {
-    // Load admin styles on all Dealers Choice admin pages
     if (strpos($hook, 'dealers-choice') !== false) {
         wp_enqueue_style(
             'dealers-choice-admin-style',
@@ -317,7 +270,6 @@ function dealers_choice_settings_enqueue_assets($hook) {
             defined('DC_VERSION') ? DC_VERSION : '1.0.0'
         );
         
-        // Enqueue admin scripts
         wp_enqueue_script(
             'dealers-choice-admin-script',
             plugin_dir_url(__FILE__) . 'admin-scripts.js',
@@ -331,22 +283,20 @@ function dealers_choice_settings_enqueue_assets($hook) {
 add_action('admin_enqueue_scripts', 'dealers_choice_settings_enqueue_assets');
 
 /**
- * Display the settings page
+ * Renders the DealersChoice Settings page.
+ *
+ * @return void
  */
 function dealers_choice_settings_page() {
-    // Check permissions
     if (!current_user_can('manage_options')) {
         wp_die(__('You do not have sufficient permissions to access this page.'));
     }
 
-    // Get the current API key value
     $api_key = get_option('dealers_choice_api_key', '');
     $client_id = get_option('dealers_choice_client_id', '');
 
-    // Get all pages for dropdowns
     $pages = get_pages();
 
-    // Get current CTA page IDs
     $cta_options = array(
         'dealers_choice_get_a_quote_page_id' => get_option('dealers_choice_get_a_quote_page_id', ''),
         'dealers_choice_schedule_test_drive_page_id' => get_option('dealers_choice_schedule_test_drive_page_id', ''),
@@ -354,10 +304,9 @@ function dealers_choice_settings_page() {
         'dealers_choice_value_your_trade_page_id' => get_option('dealers_choice_value_your_trade_page_id', ''),
     );
 
-    // Display Settings: Get current values
     $always_show_price = get_option('dealers_choice_always_show_price', '1');
     $reveal_price_scope = get_option('dealers_choice_reveal_price_scope', 'all');
-    $show_favorites = get_option('dealers_choice_show_favorites', '1');
+    $show_favorites = dealerschoiceIsFavoritesEnabled() ? '1' : '0';
     $show_other_locations = get_option('dealerschoice_show_other_locations', '0');
     $other_locations_heading = \DC\AJAX_Handlers::get_other_locations_heading();
     $other_locations_intro = \DC\AJAX_Handlers::get_other_locations_intro();
@@ -417,11 +366,11 @@ function dealers_choice_settings_page() {
                         <th scope="row"><?php _e('Show Favorites', 'dealers-choice'); ?></th>
                         <td>
                             <label class="dc-switch">
-                                <input type="checkbox" id="dealers_choice_show_favorites" name="dealers_choice_show_favorites" value="1" aria-labelledby="dealers_choice_show_favorites_label" aria-describedby="dealers_choice_show_favorites_description" <?php checked($show_favorites, '1'); ?> />
+                                <input type="checkbox" id="dealerschoice_show_favorites" name="dealerschoice_show_favorites" value="1" aria-labelledby="dealerschoice_show_favorites_label" aria-describedby="dealerschoice_show_favorites_description" <?php checked($show_favorites, '1'); ?> />
                                 <span class="dc-slider"></span>
                             </label>
-                            <label for="dealers_choice_show_favorites" class="dc-switch-label" id="dealers_choice_show_favorites_label"><?php _e('Show favorites button on inventory items', 'dealers-choice'); ?></label>
-                            <p class="description" id="dealers_choice_show_favorites_description"><?php _e('If checked, the favorites button will be displayed on inventory items.', 'dealers-choice'); ?></p>
+                            <label for="dealerschoice_show_favorites" class="dc-switch-label" id="dealerschoice_show_favorites_label"><?php _e('Show favorites button on inventory items', 'dealers-choice'); ?></label>
+                            <p class="description" id="dealerschoice_show_favorites_description"><?php _e('If checked, the favorites button will be displayed on inventory items.', 'dealers-choice'); ?></p>
                         </td>
                     </tr>
                 </table>
